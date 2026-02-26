@@ -1,26 +1,363 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@variant dark (&:where(.dark, .dark *));
 
+/* ─── Tailwind 4: @theme inline permite referencias a CSS vars en runtime ─── */
 @theme inline {
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-family-sans: 'Google Sans', 'Google Sans Display', system-ui, -apple-system, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  /* ═══ LIGHT MODE ═══ */
+  --background: #F1F3F6;
+  --foreground: #161A22;
+
+  --card: #ffffff;
+  --card-foreground: #161A22;
+
+  --popover: #ffffff;
+  --popover-foreground: #161A22;
+
+  --primary: #22C55E;
+  --primary-foreground: #ffffff;
+
+  --secondary: #E5E7EB;
+  --secondary-foreground: #1f2937;
+
+  --muted: #f0f2f5;
+  --muted-foreground: #6b7280;
+
+  --accent: #22C55E;
+  --accent-foreground: #000000;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+
+  --border: #dde1e7;
+  --input: #e8eaed;
+  --ring: #22C55E;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  /* ═══ DARK MODE ═══ */
+  --background: #080B12;
+  --foreground: #F2F2F2;
+
+  --card: #000000;
+  --card-foreground: #F2F2F2;
+
+  --popover: #161A22;
+  --popover-foreground: #F2F2F2;
+
+  --primary: #22C55E;
+  --primary-foreground: #000000;
+
+  --secondary: #1E2230;
+  --secondary-foreground: #d9d9d9;
+
+  --muted: #191D27;
+  --muted-foreground: #8b909a;
+
+  --accent: #22C55E;
+  --accent-foreground: #000000;
+
+  --destructive: #7f1d1d;
+  --destructive-foreground: #fafafa;
+
+  --border: #232834;
+  --input: #191D27;
+  --ring: #22C55E;
 }
 
 body {
-  background: var(--background);
+  font-family: 'Google Sans', 'Google Sans Display', system-ui, -apple-system, sans-serif;
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  touch-action: manipulation;
+}
+
+/* ═══ Dark Mode Animated Background ═══ */
+.dark body {
+  background-color: #080B12;
+  background-image:
+    radial-gradient(at -50% 10%, hsla(160, 60%, 20%, 0.4) 0px, transparent 50%),
+    radial-gradient(at 97% 90%, hsla(0, 0%, 0%, 1) 0px, transparent 50%),
+    radial-gradient(at 93% 23%, hsla(222, 50%, 8%, 1) 0px, transparent 50%),
+    radial-gradient(at 100% 22%, hsla(160, 80%, 30%, 0.25) 0px, transparent 50%),
+    radial-gradient(at 48% 58%, hsla(0, 0%, 0%, 1) 0px, transparent 50%),
+    radial-gradient(at 4% 64%, hsla(155, 70%, 25%, 0.3) 0px, transparent 50%),
+    radial-gradient(at 60% 73%, hsla(0, 0%, 0%, 1) 0px, transparent 50%);
+  background-attachment: fixed;
+  background-size: 200% 200%, 150% 150%, 225% 225%, 200% 200%, 150% 150%, 225% 225%, 200% 200%;
+  animation: animatedBackground 25s linear infinite;
+}
+
+@keyframes animatedBackground {
+
+  0%,
+  100% {
+    background-position: 100% 50%, 0% 50%, 50% 0%;
+    background-size: 200% 200%, 150% 150%, 225% 225%;
+  }
+
+  33% {
+    background-position: 50% 0%, 100% 50%, 0% 50%;
+    background-size: 225% 225%, 200% 200%, 150% 150%;
+  }
+
+  66% {
+    background-position: 0% 50%, 50% 100%, 100% 50%;
+    background-size: 150% 150%, 225% 225%, 200% 200%;
+  }
+}
+
+@keyframes loupe-move {
+  0% {
+    transform: translate(0px, 0px);
+  }
+  25% {
+    transform: translate(2px, 0px);
+  }
+  50% {
+    transform: translate(2px, 2px);
+  }
+  75% {
+    transform: translate(0px, 2px);
+  }
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+.animate-loupe {
+  animation: loupe-move 1s linear infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080B12;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* Card & Surface Utilities — CoinVex Dark Premium                */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Subtle green glow for highlighted cards */
+.card-glow-green {
+  box-shadow: 0 0 24px -4px rgba(34, 197, 94, 0.12),
+    0 0 64px -8px rgba(34, 197, 94, 0.06);
+}
+
+/* Accent border on cards */
+.card-accent-border {
+  border: 1px solid rgba(34, 197, 94, 0.15);
+}
+
+/* Stat card gradient (dark green tint) */
+.card-gradient-green {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.02) 100%);
+}
+
+/* Stat card gradient (blue tint) */
+.card-gradient-blue {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.02) 100%);
+}
+
+/* Stat card gradient (purple tint) */
+.card-gradient-purple {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0.02) 100%);
+}
+
+/* Stat card gradient (orange tint) */
+.card-gradient-orange {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, rgba(249, 115, 22, 0.02) 100%);
+}
+
+/* Glass/frosted surface */
+.surface-glass {
+  background: rgba(17, 19, 24, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* POS Layout                                                     */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Main POS container — fills parent height, no overflow */
+.pos-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Wrapper for products + cart sidebar */
+.pos-content-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1rem;
+  padding: 1rem;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Products panel — fills remaining width */
+.pos-products-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Cart sidebar — desktop only */
+.pos-cart-sidebar {
+  width: 18rem;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease;
+}
+
+/* Fixed bottom bar — Floating pill style */
+.pos-fixed-bottom {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+
+  width: auto;
+  min-width: min(90%, 400px);
+  max-width: calc(100% - 2rem);
+
+  background: rgba(31, 41, 55, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  border: 1px solid rgba(0, 255, 0, 0.15);
+  border-radius: 9999px;
+
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.4);
+}
+
+.dark .pos-fixed-bottom {
+  background: rgba(20, 20, 25, 0.9);
+  border-color: rgba(0, 255, 0, 0.15);
+  box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.6);
+}
+
+/* ═══ Mobile (< 640px) ═══ */
+@media (max-width: 639px) {
+  .pos-content-container {
+    flex-direction: column;
+    gap: 0;
+    padding: 0.5rem;
+  }
+
+  .pos-cart-sidebar {
+    display: none;
+  }
+
+  .pos-fixed-bottom {
+    border-radius: 1rem;
+    padding: 0.5rem;
+  }
+}
+
+/* ═══ Tablet (640px – 1023px) ═══ */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .pos-content-container {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .pos-cart-sidebar {
+    display: none;
+  }
+}
+
+/* ═══ Desktop lg (1024px – 1279px) ═══ */
+@media (min-width: 1024px) {
+  .pos-content-container {
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .pos-cart-sidebar {
+    width: 18rem;
+  }
+}
+
+/* ═══ Desktop xl (≥ 1280px) ═══ */
+@media (min-width: 1280px) {
+  .pos-content-container {
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  .pos-cart-sidebar {
+    width: 22rem;
+  }
 }

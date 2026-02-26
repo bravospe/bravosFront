@@ -1,6 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ====================================
+# GITIGNORE - BRAVOS DASHBOARD (NEXT.JS)
+# ====================================
 
-# dependencies
+# ============ DEPENDENCIES ============
 /node_modules
 /.pnp
 .pnp.*
@@ -10,32 +12,44 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# ============ TESTING ============
 /coverage
+test-results/
+playwright-report/
+.nyc_output
 
-# next.js
+# ============ NEXT.JS ============
 /.next/
 /out/
-
-# production
 /build
+.next
+out
 
-# misc
+# ============ MISC ============
 .DS_Store
 *.pem
 
-# debug
+# ============ DEBUG ============
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# ============ ENVIRONMENT ============
 .env*
+!.env.example
 
-# vercel
+# ============ VERCEL ============
 .vercel
 
-# typescript
+# ============ TYPESCRIPT ============
 *.tsbuildinfo
 next-env.d.ts
+
+# ============ IDE ============
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.swp
+*.swo
+*~

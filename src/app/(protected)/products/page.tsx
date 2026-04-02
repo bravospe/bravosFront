@@ -5,8 +5,6 @@ import { Tab } from '@headlessui/react';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
-  PencilIcon,
-  TrashIcon,
   FolderIcon,
   FolderOpenIcon,
   SwatchIcon,
@@ -15,8 +13,16 @@ import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
   ChevronDownIcon,
-  EllipsisHorizontalIcon,
+  ClockIcon,
+  XMarkIcon,
+  PencilIcon,
+  TrashIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
+import {
+  PencilIcon as PencilIconSolid,
+  TrashIcon as TrashIconSolid,
+} from '@heroicons/react/24/solid';
 import { Button } from '@/components/ui';
 import { Toggle } from '@/components/ui';
 import { useProductStore } from '@/stores/productStore';
@@ -27,6 +33,10 @@ import { Product, Category } from '@/types';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 import ImageWithFallback from '@/components/ui/ImageWithFallback';
+import { useAuthStore } from '@/stores/authStore';
+import api from '@/lib/api';
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 type ProductStatus = 'all' | 'active' | 'draft' | 'archived';
 
@@ -44,6 +54,38 @@ export default function ProductsPage() {
   // Category Modal State
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
+  // Sales History Modal State
+  const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyMeta, setHistoryMeta] = useState<any>(null);
+
+  const { user } = useAuthStore();
+
+  const fetchProductHistory = async (product: Product, page = 1) => {
+    const companyId = user?.current_company_id || user?.companies?.[0]?.id;
+    if (!companyId) return;
+    setHistoryLoading(true);
+    try {
+      const res = await api.get(`/companies/${companyId}/products/${product.id}/sales-history`, {
+        params: { page, per_page: 10 },
+      });
+      setHistoryData(res.data.data || []);
+      setHistoryMeta(res.data.meta || null);
+      setHistoryPage(page);
+    } catch {
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleOpenHistory = (product: Product) => {
+    setHistoryProduct(product);
+    fetchProductHistory(product, 1);
+  };
 
   useEffect(() => {
     fetchProducts({ page, search });
@@ -453,26 +495,27 @@ export default function ProductsPage() {
                           </td>
                           {/* Actions */}
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenHistory(product)}
+                                className="p-1.5 text-blue-500 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded transition-colors"
+                                title="Historial de ventas"
+                              >
+                                <ClockIcon className="w-4 h-4" />
+                              </button>
                               <button
                                 onClick={() => handleEditProduct(product)}
-                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded transition-colors"
+                                className="p-1.5 text-emerald-500 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded transition-colors"
                                 title="Editar"
                               >
-                                <PencilIcon className="w-4 h-4" />
+                                <PencilIconSolid className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(product.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                className="p-1.5 text-red-500 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded transition-colors"
                                 title="Eliminar"
                               >
-                                <TrashIcon className="w-4 h-4" />
-                              </button>
-                              <button
-                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded transition-colors"
-                                title="Más opciones"
-                              >
-                                <EllipsisHorizontalIcon className="w-4 h-4" />
+                                <TrashIconSolid className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -580,6 +623,125 @@ export default function ProductsPage() {
         onClose={() => setIsCategoryDialogOpen(false)}
         category={editingCategory}
       />
+
+      {/* Sales History Modal */}
+      {historyProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setHistoryProduct(null)} />
+          <div className="relative bg-white dark:bg-[#0F1117] rounded-2xl shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col border border-gray-200 dark:border-[#232834]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-[#232834]">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Historial de ventas</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{historyProduct.name}</p>
+              </div>
+              <button
+                onClick={() => setHistoryProduct(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded-lg transition-colors"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto">
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <svg className="animate-spin h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                </div>
+              ) : historyData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+                  <ClockIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">Este producto no tiene ventas registradas</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-100 dark:divide-[#1E2230]">
+                  <thead className="bg-gray-50 dark:bg-[#1E2230]/50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Comprobante</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cant.</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Precio unit.</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha</th>
+                      <th className="px-5 py-3 w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-[#0F1117] divide-y divide-gray-100 dark:divide-[#1E2230]">
+                    {historyData.map((row: any, i: number) => (
+                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-[#1E2230]/40 transition-colors">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={clsx(
+                              'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap',
+                              row.source === 'comprobante'
+                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            )}>
+                              {row.source === 'comprobante' ? 'Comprobante' : 'Nota de Venta'}
+                            </span>
+                            <span className="text-sm text-gray-900 dark:text-white font-mono">{row.number}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{row.client || '—'}</td>
+                        <td className="px-5 py-3 text-sm text-gray-900 dark:text-white text-right tabular-nums">{Number(row.quantity).toFixed(2)}</td>
+                        <td className="px-5 py-3 text-sm text-gray-900 dark:text-white text-right tabular-nums">S/ {Number(row.unit_price).toFixed(2)}</td>
+                        <td className="px-5 py-3 text-sm font-semibold text-gray-900 dark:text-white text-right tabular-nums">S/ {Number(row.total).toFixed(2)}</td>
+                        <td className="px-5 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                          {row.created_at ? format(parseISO(row.created_at), 'dd MMM yyyy', { locale: es }) : '—'}
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={() => {
+                              setHistoryProduct(null);
+                              router.push(`/invoices?open=${row.uuid}`);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                            title="Ver detalle de la venta"
+                          >
+                            <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer / Pagination */}
+            {historyMeta && (
+              <div className="px-6 py-3 border-t border-gray-200 dark:border-[#232834] flex items-center justify-between">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {historyMeta.total} registro{historyMeta.total !== 1 ? 's' : ''}
+                  {historyMeta.last_page > 1 && ` · Página ${historyMeta.current_page} de ${historyMeta.last_page}`}
+                </span>
+                {historyMeta.last_page > 1 && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => fetchProductHistory(historyProduct, historyPage - 1)}
+                      disabled={historyPage === 1}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-[#1E2230] border border-gray-300 dark:border-[#232834] rounded-lg hover:bg-gray-50 dark:hover:bg-[#232834] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => fetchProductHistory(historyProduct, historyPage + 1)}
+                      disabled={historyPage === historyMeta.last_page}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-[#1E2230] border border-gray-300 dark:border-[#232834] rounded-lg hover:bg-gray-50 dark:hover:bg-[#232834] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

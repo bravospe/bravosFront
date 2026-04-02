@@ -63,6 +63,16 @@ export const authService = {
     await api.post('/auth/logout')
   },
 
+  async sendOTP(phone: string): Promise<{ success: boolean; message: string }> {
+    const { data } = await api.post('/auth/send-otp', { phone });
+    return data;
+  },
+
+  async verifyOTP(phone: string, code: string): Promise<{ success: boolean; message: string }> {
+    const { data } = await api.post('/auth/verify-otp', { phone, code });
+    return data;
+  },
+
   async me(): Promise<{ user: User }> {
     const { data } = await api.get<{ user: User }>('/auth/me')
     return data

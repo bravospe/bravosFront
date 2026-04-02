@@ -52,9 +52,20 @@ export interface Subscription {
   plan_id: string
   plan?: Plan
   status: 'trial' | 'active' | 'cancelled' | 'expired'
+  billing_period?: 'monthly' | 'semiannual' | 'yearly'
   trial_ends_at?: string
   starts_at?: string
   ends_at?: string
+  cancelled_at?: string
+  last_payment_at?: string
+  next_payment_at?: string
+  // Computed from API
+  days_remaining?: number
+  total_days?: number
+  percentage_used?: number
+  is_trial?: boolean
+  is_expiring_soon?: boolean
+  expiry_date?: string
 }
 
 export interface Plan {
@@ -63,15 +74,53 @@ export interface Plan {
   slug: string
   description?: string
   price_monthly: number
+  price_semiannual: number
   price_yearly: number
   currency: string
-  max_users: number
-  max_products: number
-  max_invoices_monthly: number
+  trial_days?: number
+  // Limits (null = ilimitado)
+  max_users: number | null
+  max_products: number | null
+  max_invoices_monthly: number | null
+  max_sales_monthly: number | null
+  max_clients: number | null
+  max_suppliers: number | null
+  max_warehouses: number | null
+  max_branches: number | null
+  max_pos_sessions: number | null
+  storage_limit_mb: number | null
+  // Feature flags
+  has_pos: boolean
+  has_invoicing: boolean
+  has_inventory: boolean
+  has_clients: boolean
+  has_suppliers: boolean
+  has_quotes: boolean
+  has_credit_notes: boolean
+  has_dispatch_guides: boolean
+  has_product_variants: boolean
+  has_multi_warehouse: boolean
+  has_multi_branch: boolean
+  has_reports_advanced: boolean
+  has_api_access: boolean
+  has_barcode_scanner: boolean
+  has_email_support: boolean
+  has_priority_support: boolean
+  has_whatsapp_integration: boolean
+  has_custom_branding: boolean
+  // Arrays
   modules: string[]
   features: string[]
+  // Display
   is_active: boolean
   is_popular: boolean
+  is_recommended: boolean
+  badge?: string
+  badge_color?: string
+  sort_order: number
+  // Computed
+  yearly_savings_percentage: number
+  semiannual_savings_percentage: number
 }
 
 // Client types
@@ -176,6 +225,8 @@ export interface Invoice {
   status: 'draft' | 'pending' | 'sent' | 'accepted' | 'rejected' | 'cancelled'
   sunat_status?: string
   sunat_hash?: string
+  sent_at?: string | null
+  accepted_at?: string | null
   client?: Client
   seller?: User
   items?: InvoiceItem[]

@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3003', // Next.js runs here by default in docker compose
+    baseURL: 'http://localhost:3002', // Testing against local port 3002
     trace: 'off',
     screenshot: 'off',
   },

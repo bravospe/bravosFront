@@ -13,6 +13,7 @@ export interface SaleWithRelations extends Sale {
     correlative: number
     document_type: string
     status: string
+    accepted_at?: string | null
   }
   items?: Array<{
     id: string

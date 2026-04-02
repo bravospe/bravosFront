@@ -47,6 +47,7 @@ interface ClientState {
     createClient: (data: Partial<Client>) => Promise<Client>;
     updateClient: (id: string, data: Partial<Client>) => Promise<Client>;
     deleteClient: (id: string) => Promise<void>;
+    findClientByDocument: (documentNumber: string) => Promise<Client | null>;
 }
 
 export const useClientStore = create<ClientState>((set) => ({
@@ -189,6 +190,31 @@ export const useClientStore = create<ClientState>((set) => ({
                 isLoading: false
             });
             throw error;
+        }
+    },
+
+    findClientByDocument: async (documentNumber) => {
+        try {
+            const { user, token } = useAuthStore.getState();
+            if (!token || !user) return null;
+
+            const companyId = user.current_company_id || user.companies?.[0]?.id;
+            if (!companyId) return null;
+
+            const response = await axios.get<any>(`${API_URL}/companies/${companyId}/clients`, {
+                headers: { Authorization: `Bearer ${token}` },
+                params: {
+                    search: documentNumber,
+                    per_page: 1,
+                },
+            });
+
+            // The backend search might return partial matches, so we double check
+            const clients = response.data.data || [];
+            return clients.find((c: any) => c.document_number === documentNumber) || null;
+        } catch (error) {
+            console.error('Error finding client by document:', error);
+            return null;
         }
     },
 }));

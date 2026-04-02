@@ -135,28 +135,32 @@ export default function ClientHistoryModal({ isOpen, onClose, client }: ClientHi
                                 leaveFrom="opacity-100 scale-100"
                                 leaveTo="opacity-0 scale-95"
                             >
-                                <Dialog.Panel className="w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white dark:bg-black p-6 text-left align-middle shadow-xl transition-all border border-gray-100 dark:border-[#232834]">
-                                    <div className="flex items-center justify-between mb-6">
+                                <Dialog.Panel className="w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white dark:bg-black text-left align-middle shadow-xl transition-all border border-gray-100 dark:border-[#232834]">
+                                    <div className="flex items-center justify-between py-2 px-4 border-b border-gray-200 dark:border-[#232834]">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-emerald-100 dark:bg-emerald-500/10 rounded-lg">
-                                                <ShoppingCartIcon className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+                                                <ShoppingCartIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                                             </div>
                                             <div>
-                                                <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 dark:text-white">
+                                                <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 dark:text-white">
                                                     Historial de Compras
                                                 </Dialog.Title>
-                                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                    {client?.name} • {client?.document_number || 'Sin documento'}
-                                                </p>
                                             </div>
                                         </div>
                                         <button
                                             onClick={onClose}
                                             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg transition-colors"
                                         >
-                                            <XMarkIcon className="w-6 h-6" />
+                                            <XMarkIcon className="w-5 h-5" />
                                         </button>
                                     </div>
+
+                                    <div className="p-6">
+                                        <div className="mb-6">
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                {client?.name} • {client?.document_number || 'Sin documento'}
+                                            </p>
+                                        </div>
 
                                     <div className="overflow-hidden rounded-xl border border-gray-100 dark:border-[#232834]">
                                         <table className="min-w-full divide-y divide-gray-100 dark:divide-[#232834]">
@@ -264,6 +268,7 @@ export default function ClientHistoryModal({ isOpen, onClose, client }: ClientHi
                                         >
                                             Cerrar
                                         </button>
+                                    </div>
                                     </div>
                                 </Dialog.Panel>
                             </Transition.Child>

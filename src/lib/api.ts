@@ -95,10 +95,15 @@ api.interceptors.response.use(
     }
     
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      useAuthStore.getState().logout()
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
+      // Don't logout if it's a chat operation (might be a transient error)
+      const isChatEndpoint = error.config.url?.includes('/admin/whatsapp');
+      
+      if (!isChatEndpoint) {
+        // Token expired or invalid
+        useAuthStore.getState().logout()
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
       }
     }
     

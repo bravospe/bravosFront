@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal, Input, Button } from '@/components/ui';
 import { useSupplierStore, Supplier } from '@/stores/supplierStore';
+import validationService from '@/services/validationService';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
 interface SupplierModalProps {
@@ -38,12 +40,14 @@ interface SupplierFormData {
 const SupplierModal = ({ isOpen, onClose, supplier, onSuccess }: SupplierModalProps) => {
     const { createSupplier, updateSupplier, isLoading } = useSupplierStore();
     const isEditing = !!supplier;
+    const [isValidating, setIsValidating] = useState(false);
 
     const {
         register,
         handleSubmit,
         reset,
         watch,
+        setValue,
         formState: { errors },
     } = useForm<SupplierFormData>({
         defaultValues: {
@@ -53,6 +57,51 @@ const SupplierModal = ({ isOpen, onClose, supplier, onSuccess }: SupplierModalPr
     });
 
     const documentType = watch('document_type');
+    const documentNumber = watch('document_number');
+
+    const handleSearch = async () => {
+        if (!documentNumber) {
+            toast.error('Ingresa un número de documento');
+            return;
+        }
+
+        if (documentType === 'RUC' && documentNumber.length !== 11) {
+            toast.error('RUC debe tener 11 dígitos');
+            return;
+        }
+
+        if (documentType === 'DNI' && documentNumber.length !== 8) {
+            toast.error('DNI debe tener 8 dígitos');
+            return;
+        }
+
+        setIsValidating(true);
+        try {
+            let response;
+            if (documentType === 'RUC') {
+                response = await validationService.validateRuc(documentNumber);
+            } else if (documentType === 'DNI') {
+                response = await validationService.validateDni(documentNumber);
+            }
+
+            if (response?.valid && response.data) {
+                setValue('name', response.data.name);
+                if (response.data.trade_name) setValue('trade_name', response.data.trade_name);
+                if (response.data.address) setValue('address', response.data.address);
+                if (response.data.department) setValue('department', response.data.department);
+                if (response.data.province) setValue('province', response.data.province);
+                if (response.data.district) setValue('district', response.data.district);
+                toast.success('Datos encontrados');
+            } else {
+                toast.error(response?.message || 'No se encontraron datos');
+            }
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error al validar el documento');
+        } finally {
+            setIsValidating(false);
+        }
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -130,19 +179,31 @@ const SupplierModal = ({ isOpen, onClose, supplier, onSuccess }: SupplierModalPr
                             <option value="CE">Carnet Extranjería</option>
                         </select>
                     </div>
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-2 relative">
                         <Input
                             label="N° Documento"
                             {...register('document_number', {
-                                required: 'Número de documento requerido',
-                                pattern: {
-                                    value: documentType === 'RUC' ? /^\d{11}$/ : /^\d{8}$/,
-                                    message: documentType === 'RUC' ? 'RUC debe tener 11 dígitos' : 'DNI debe tener 8 dígitos'
-                                }
+                                required: 'Número de documento requerido'
                             })}
                             error={errors.document_number?.message}
                             placeholder={documentType === 'RUC' ? '20123456789' : '12345678'}
+                            className="pr-10"
                         />
+                        {(documentType === 'RUC' || documentType === 'DNI') && (
+                            <button
+                                type="button"
+                                onClick={handleSearch}
+                                disabled={isValidating}
+                                className="absolute right-2 top-8 p-2 text-emerald-600 hover:text-emerald-700 disabled:text-gray-400"
+                                title="Buscar datos"
+                            >
+                                {isValidating ? (
+                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                                ) : (
+                                    <MagnifyingGlassIcon className="h-5 w-5" />
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
 

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useProductStore } from '@/stores/productStore';
 import { useCategoryStore } from '@/stores/categoryStore';
 import { useBrandStore } from '@/stores/brandStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { Button, Input, Toggle } from '@/components/ui';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
@@ -41,6 +42,7 @@ const ProductForm = ({ productId }: ProductFormProps) => {
     const { createProduct, updateProduct, getProduct, isLoading } = useProductStore();
     const { categories, fetchCategories } = useCategoryStore();
     const { brands, fetchBrands } = useBrandStore();
+    const { units, fetchUnits } = useSettingsStore();
 
     // Multi-image state using ProductMediaManager
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
@@ -49,6 +51,7 @@ const ProductForm = ({ productId }: ProductFormProps) => {
     useEffect(() => {
         fetchCategories();
         fetchBrands();
+        fetchUnits();
     }, []);
 
     const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<ProductFormData>({
@@ -350,12 +353,20 @@ const ProductForm = ({ productId }: ProductFormProps) => {
                             </label>
                             <select
                                 {...register('unit_code')}
+                                onChange={(e) => {
+                                    const code = e.target.value;
+                                    const unit = units.find(u => u.abbreviation === code);
+                                    setValue('unit_code', code);
+                                    if (unit) setValue('unit_name', unit.name);
+                                }}
                                 className="block w-full rounded-lg border border-gray-300 dark:border-[#232834] shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 bg-white dark:bg-black dark:text-gray-100 sm:text-sm px-4 py-2.5 appearance-none bg-[url('data:image/svg+xml,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 20 20%27%3e%3cpath stroke=%27%236b7280%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%271.5%27 d=%27M6 8l4 4 4-4%27/%3e%3c/svg%3e')] bg-[length:1.5rem_1.5rem] bg-no-repeat bg-right pr-10 transition-colors"
                             >
                                 <option value="NIU">Unidad (NIU)</option>
-                                <option value="KGM">Kilogramo (KGM)</option>
-                                <option value="LTR">Litro (LTR)</option>
-                                <option value="BX">Caja (BX)</option>
+                                {units.filter(u => u.abbreviation !== 'NIU').map((unit) => (
+                                    <option key={unit.id} value={unit.abbreviation}>
+                                        {unit.name} ({unit.abbreviation})
+                                    </option>
+                                ))}
                             </select>
                         </div>
                     </div>

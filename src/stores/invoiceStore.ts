@@ -11,10 +11,18 @@ export interface InvoiceItem {
     product_id: string
     product_name: string
     product_code: string
+    code?: string
+    description?: string
+    unit_code?: string
+    unit_name?: string
     quantity: number
     unit_price: number
     discount: number
+    discount_amount?: number
+    discount_percentage?: number
     subtotal: number
+    tax_type?: string
+    tax_percentage?: number
     tax_amount: number
     total: number
 }
@@ -24,7 +32,7 @@ export interface Invoice {
     company_id: string
     client_id: string
     sale_id?: string
-    document_type: '01' | '03' | '07' | '08' // 01=Factura, 03=Boleta, 07=NC, 08=ND
+    document_type: '01' | '03' | '07' | '08' | '00' // 01=Factura, 03=Boleta, 07=NC, 08=ND
     series: string
     number: string
     issue_date: string
@@ -36,13 +44,17 @@ export interface Invoice {
     discount_amount: number
     total: number
     sunat_status: 'pending' | 'sent' | 'accepted' | 'rejected' | 'annulled'
-    sunat_response?: string
+    sunat_response?: any
     sunat_hash?: string
     xml_path?: string
     pdf_path?: string
+    document_model?: 'invoice' | 'sale'
     cdr_path?: string
     payment_status: 'pending' | 'partial' | 'paid'
+    payment_method?: string
     notes?: string
+    correlative?: number | string
+    tax_igv?: number
     created_at: string
     updated_at: string
     // Relations
@@ -76,8 +88,11 @@ interface InvoiceState {
         document_type?: string
         sunat_status?: string
         payment_status?: string
+        payment_method?: string
         date_from?: string
         date_to?: string
+        seller_id?: string
+        cash_register_id?: string
     }
 
     // Actions
@@ -155,12 +170,23 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
         set({ isLoading: true, error: null })
 
         try {
-            const response = await axios.get<Invoice>(`${API_URL}/companies/${companyId}/invoices/${id}`, {
+            const state = get()
+            const inv = state.invoices.find((i: any) => i.id === id)
+            let url = `${API_URL}/companies/${companyId}/invoices/${id}`
+            if (inv?.document_model === 'sale') {
+                url = `${API_URL}/companies/${companyId}/sales/${id}`
+            }
+
+            const response = await axios.get(url, {
                 headers: getAuthHeaders()
             })
 
-            set({ currentInvoice: response.data, isLoading: false })
-            return response.data
+            let invoice = response.data.data || response.data
+            if (inv?.document_model === 'sale') {
+                invoice.document_model = 'sale'
+            }
+            set({ currentInvoice: invoice, isLoading: false })
+            return invoice
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || 'Error al cargar comprobante',

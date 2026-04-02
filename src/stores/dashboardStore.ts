@@ -26,15 +26,21 @@ interface DashboardStats {
 }
 
 interface RecentInvoice {
+    uuid?: string;
     id: string;
     client: string;
     amount: string;
     status: string;
     date: string;
+    items_count?: number;
+    payment_method?: string;
+    type?: 'invoice' | 'pos';
 }
 
 interface TopProduct {
+    id?: string;
     name: string;
+    image: string | null;
     quantity: number;
     revenue: string;
 }
@@ -85,6 +91,8 @@ interface DashboardState {
     error: string | null;
     selectedPeriod: 'week' | 'month' | 'quarter' | 'year';
     fetchDashboardStats: () => Promise<void>;
+    fetchChartsOnly: () => Promise<void>;
+    fetchRecentSalesOnly: () => Promise<void>;
     setSelectedPeriod: (period: 'week' | 'month' | 'quarter' | 'year') => void;
 }
 
@@ -104,7 +112,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         set({ isLoading: true, error: null });
         try {
             const token = useAuthStore.getState().token;
-            if (!token) throw new Error('No authenticated');
+            if (!token) throw new Error('Not authenticated');
 
             const response = await axios.get(`${API_URL}/dashboard/stats`, {
                 headers: {
@@ -131,10 +139,46 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         }
     },
 
+    fetchChartsOnly: async () => {
+        try {
+            const token = useAuthStore.getState().token;
+            if (!token) return;
+
+            const response = await axios.get(`${API_URL}/dashboard/stats`, {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { period: get().selectedPeriod },
+            });
+
+            if (response.data.charts) {
+                set({ charts: response.data.charts });
+            }
+        } catch (error) {
+            console.error('Fetch charts error:', error);
+        }
+    },
+
+    fetchRecentSalesOnly: async () => {
+        try {
+            const token = useAuthStore.getState().token;
+            if (!token) return;
+
+            const response = await axios.get(`${API_URL}/dashboard/stats`, {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { period: get().selectedPeriod },
+            });
+
+            if (response.data.recent_invoices) {
+                set({ recentInvoices: response.data.recent_invoices });
+            }
+        } catch (error) {
+            // Silently fail for background updates
+        }
+    },
+
     setSelectedPeriod: (period) => {
         set({ selectedPeriod: period });
-        // Re-fetch with new period
-        get().fetchDashboardStats();
+        // Solo refrescamos los gráficos al cambiar el periodo
+        get().fetchChartsOnly();
     },
 }));
 

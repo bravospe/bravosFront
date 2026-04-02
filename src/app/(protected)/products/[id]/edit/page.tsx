@@ -1,6 +1,6 @@
 'use client';
 
-import ProductForm from '@/components/products/ProductForm';
+import ProductFormV2 from '@/components/products/ProductFormV2';
 import { useParams } from 'next/navigation';
 
 export default function EditProductPage() {
@@ -9,5 +9,5 @@ export default function EditProductPage() {
 
   if (!id) return null;
 
-  return <ProductForm productId={id} />;
+  return <ProductFormV2 productId={id} />;
 }

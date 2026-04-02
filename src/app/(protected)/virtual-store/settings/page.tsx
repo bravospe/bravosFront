@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { clsx } from 'clsx';
 import {
   GlobeAltIcon,
@@ -18,10 +18,13 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/stores/authStore';
 import { useVirtualStoreStore } from '@/stores/virtualStoreStore';
+import virtualStoreService from '@/services/virtualStoreService';
 import toast from 'react-hot-toast';
 import { LaserLoader } from '@/components/ui';
 import PaymentMethods from './components/PaymentMethods';
 import ShippingMethods from './components/ShippingMethods';
+
+type SlugStatus = 'idle' | 'checking' | 'available' | 'taken' | 'reserved' | 'invalid';
 
 const StoreSettingsPage = () => {
   const { currentCompany } = useAuthStore();
@@ -29,6 +32,8 @@ const StoreSettingsPage = () => {
   
   const [activeTab, setActiveTab] = useState('general');
   const [isSaving, setIsSaving] = useState(false);
+  const [slugStatus, setSlugStatus] = useState<SlugStatus>('idle');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -100,9 +105,49 @@ const StoreSettingsPage = () => {
       .replace(/ on\w+=\w+/g, '');
   };
 
+  const RESERVED_NAMES = ['app', 'api', 'www', 'shop', 'home', 'back', 'admin', 'mail', 'ftp', 'staging', 'dev', 'consulta', 'ok', 'n8n', 'whatsapp', 'wa', 'webmail'];
+
+  const checkSlugAvailability = useCallback((slug: string) => {
+    if (!currentCompany?.id) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (slug.length === 0) { setSlugStatus('idle'); return; }
+    if (slug.length < 8) { setSlugStatus('invalid'); return; }
+    if (!/^[a-z0-9-]+$/.test(slug)) { setSlugStatus('invalid'); return; }
+    if (RESERVED_NAMES.includes(slug)) { setSlugStatus('reserved'); return; }
+
+    setSlugStatus('checking');
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const result = await virtualStoreService.checkSlug(currentCompany.id, slug);
+        if (result.reason === 'reserved') setSlugStatus('reserved');
+        else setSlugStatus(result.available ? 'available' : 'taken');
+      } catch {
+        setSlugStatus('idle');
+      }
+    }, 600);
+  }, [currentCompany?.id]);
+
+  const slugError = (): string | null => {
+    if (slugStatus === 'invalid') return 'Mínimo 8 caracteres, solo letras, números y guiones';
+    if (slugStatus === 'reserved') return 'Este nombre está reservado para el sistema';
+    if (slugStatus === 'taken') return 'Este slug ya está en uso por otra tienda';
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentCompany?.id) return;
+
+    // Validaciones extra antes de enviar
+    if (['invalid', 'reserved', 'taken'].includes(slugStatus)) {
+      toast.error(slugError() || 'El slug no es válido');
+      return;
+    }
+    if (slugStatus === 'checking') {
+      toast.error('Espera a que se verifique la disponibilidad del slug');
+      return;
+    }
 
     setIsSaving(true);
     
@@ -220,8 +265,52 @@ const StoreSettingsPage = () => {
                     <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-black text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Mi Tienda Online" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug (URL Amigable)</label>
-                    <input type="text" value={formData.slug} onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="w-full px-3 py-2 border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-black text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="mi-tienda" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug (URL de tu tienda)</label>
+                    <div className="relative">
+                      <div className={clsx(
+                        "flex items-center border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500",
+                        slugStatus === 'available' ? "border-emerald-500" :
+                        ['invalid','reserved','taken'].includes(slugStatus) ? "border-red-500" :
+                        "border-gray-300 dark:border-[#232834]"
+                      )}>
+                        <input
+                          type="text"
+                          value={formData.slug}
+                          onChange={(e) => {
+                            const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                            setFormData({ ...formData, slug: val });
+                            checkSlugAvailability(val);
+                          }}
+                          className="flex-1 px-3 py-2 bg-white dark:bg-black text-gray-900 dark:text-white outline-none"
+                          placeholder="mi-tienda-oficial"
+                          maxLength={50}
+                        />
+                        <span className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-[#1E2230] border-l border-gray-300 dark:border-[#232834] whitespace-nowrap">.bravos.pe</span>
+                        <span className="px-3">
+                          {slugStatus === 'checking' && (
+                            <ArrowPathIcon className="w-4 h-4 text-gray-400 animate-spin" />
+                          )}
+                          {slugStatus === 'available' && (
+                            <CheckCircleIcon className="w-4 h-4 text-emerald-500" />
+                          )}
+                          {['invalid','reserved','taken'].includes(slugStatus) && (
+                            <span className="text-red-500 text-lg leading-none">✗</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                    {slugStatus === 'available' && (
+                      <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                        ✓ Disponible — tu tienda estará en <span className="font-mono font-semibold">{formData.slug}.bravos.pe</span>
+                      </p>
+                    )}
+                    {slugError() && (
+                      <p className="mt-1 text-xs text-red-500">{slugError()}</p>
+                    )}
+                    {slugStatus === 'idle' && formData.slug.length > 0 && formData.slug.length >= 8 && (
+                      <p className="mt-1 text-xs text-gray-400">Tu tienda estará en <span className="font-mono">{formData.slug}.bravos.pe</span></p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-400">Solo letras minúsculas, números y guiones. Mínimo 8 caracteres.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
@@ -243,9 +332,21 @@ const StoreSettingsPage = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subdominio</label>
                     <div className="flex">
-                      <input type="text" value={formData.subdomain} onChange={(e) => setFormData({ ...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="flex-1 px-3 py-2 border border-gray-300 dark:border-[#232834] rounded-l-lg bg-white dark:bg-black text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="mitienda" />
+                      <input 
+                        type="text" 
+                        value={formData.subdomain} 
+                        onChange={(e) => setFormData({ ...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} 
+                        className={clsx(
+                          "flex-1 px-3 py-2 border rounded-l-lg bg-white dark:bg-black text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500",
+                          validateSlug(formData.subdomain) ? "border-red-500" : "border-gray-300 dark:border-[#232834]"
+                        )}
+                        placeholder="mitiendaoficial" 
+                      />
                       <span className="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 dark:border-[#232834] rounded-r-lg bg-gray-50 dark:bg-[#1E2230] text-gray-500 text-sm">.bravos.pe</span>
                     </div>
+                    {validateSlug(formData.subdomain) && (
+                      <p className="mt-1 text-xs text-red-500">{validateSlug(formData.subdomain)}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dominio personalizado</label>

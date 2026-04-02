@@ -13,6 +13,7 @@ export interface ModalProps {
   footer?: ReactNode;
   showClose?: boolean;
   closeOnOverlay?: boolean;
+  initialFocus?: React.MutableRefObject<HTMLElement | null>;
 }
 
 const Modal = ({
@@ -25,6 +26,7 @@ const Modal = ({
   footer,
   showClose = true,
   closeOnOverlay = true,
+  initialFocus,
 }: ModalProps) => {
   const sizes = {
     sm: 'max-w-sm',
@@ -40,6 +42,7 @@ const Modal = ({
         as="div"
         className="relative z-50"
         onClose={closeOnOverlay ? onClose : () => { }}
+        initialFocus={initialFocus}
       >
         <Transition.Child
           as={Fragment}
@@ -72,7 +75,7 @@ const Modal = ({
               >
                 {/* Header */}
                 {(title || showClose) && (
-                  <div className="flex items-start justify-between p-5 border-b border-gray-200 dark:border-[#1E2230]">
+                  <div className="flex items-start justify-between py-2 px-4 border-b border-gray-200 dark:border-[#1E2230]">
                     <div>
                       {title && (
                         <Dialog.Title

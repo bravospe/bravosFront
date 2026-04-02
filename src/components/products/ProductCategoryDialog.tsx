@@ -233,22 +233,20 @@ const ProductCategoryDialog = ({ isOpen, onClose, category }: ProductCategoryDia
                             leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                         >
                             <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-black text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-                                <div className="absolute right-0 top-0 hidden pr-4 pt-4 sm:block">
+                                <div className="flex items-center justify-between py-2 px-4 border-b border-gray-100 dark:border-[#1E2230]">
+                                    <Dialog.Title as="h3" className="text-lg font-bold leading-6 text-gray-900 dark:text-white">
+                                        {category ? 'Editar Categoría' : 'Nueva Categoría'}
+                                    </Dialog.Title>
                                     <button
                                         type="button"
                                         className="rounded-md bg-white dark:bg-black text-gray-400 hover:text-gray-500 focus:outline-none"
                                         onClick={onClose}
                                     >
-                                        <span className="sr-only">Cerrar</span>
-                                        <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                                        <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                                     </button>
                                 </div>
 
-                                <div className="px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                                    <Dialog.Title as="h3" className="text-xl font-bold leading-6 text-gray-900 dark:text-white mb-4">
-                                        {category ? 'Editar Categoría' : 'Nueva Categoría'}
-                                    </Dialog.Title>
-
+                                <div className="p-4 sm:p-6">
                                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                                         <Input
                                             label="Nombre"

@@ -12,6 +12,7 @@ export interface CartItem {
   quantity: number
   unitPrice: number
   discount: number
+  discountType: 'percentage' | 'fixed'
 }
 
 export interface POSSession {
@@ -20,9 +21,37 @@ export interface POSSession {
   cash_register_id: string
   opening_amount: number
   closing_amount: number | null
+  expected_amount?: number
+  difference?: number
+  total_sales?: number
+  total_cash?: number
+  total_card?: number
+  total_transfer?: number
+  total_yape_plin?: number
+  total_credit?: number
+  notes?: string | null
   status: 'open' | 'closed'
   opened_at: string
   closed_at: string | null
+  cash_register?: CashRegister
+  user?: { id: string; name: string }
+}
+
+export interface SessionSummary {
+  total_sales: number
+  total_transactions: number
+  by_payment_method: {
+    cash: number
+    card: number
+    transfer: number
+    yape_plin: number
+    credit: number
+  }
+  cash_movements: {
+    incomes: number
+    expenses: number
+  }
+  expected_cash: number
 }
 
 export interface CashRegister {
@@ -31,18 +60,39 @@ export interface CashRegister {
   code: string | null
   description: string | null
   is_active: boolean
+  payment_methods: string[] | null
+  active_session_id: string | null
+  active_user_id: string | null
+  locked_at: string | null
+  active_user?: { id: string; name: string } | null
+}
+
+export interface RegisterStatus {
+  id: string
+  name: string
+  code: string | null
+  status: 'available' | 'occupied' | 'inactive'
+  is_active: boolean
+  current_user: { id: string; name: string } | null
+  locked_at: string | null
+  session_opened_at?: string
+  total_sales?: number
+  transaction_count?: number
 }
 
 export interface SaleData {
   client_id?: string | null
-  document_type: '03' | '01' // 03=Boleta, 01=Factura
+  document_type: '00' | '03' | '01' // 00=Nota de Venta, 03=Boleta, 01=Factura
   payment_method: 'cash' | 'card' | 'transfer' | 'yape_plin' | 'credit' | 'mixed'
   items: Array<{
     product_id: string
     quantity: number
     unit_price: number
-    discount: number
+    discount_type: 'percentage' | 'fixed'
+    discount_percentage: number
   }>
+  global_discount_type?: 'percentage' | 'fixed'
+  global_discount_value?: number
   cash_received?: number
   notes?: string
 }
@@ -53,26 +103,35 @@ export interface SaleResult {
     total: number
     payment_method: string
     change_amount: number
+    sale_number?: string
+    global_discount_amount?: number
   }
   invoice?: {
     id: string
     series: string
     number: string
-  }
+    correlative?: number
+    verification_url?: string
+  } | null
 }
 
 interface POSState {
   // Cart state
   cart: CartItem[]
   selectedClient: Client | null
-  documentType: '03' | '01'
+  documentType: '00' | '03' | '01'
   paymentMethod: 'cash' | 'card' | 'transfer' | 'yape_plin' | 'credit' | 'mixed'
   cashReceived: number
+  globalDiscountType: 'percentage' | 'fixed'
+  globalDiscountValue: number
 
   // Session state
   currentSession: POSSession | null
   cashRegisters: CashRegister[]
+  registersStatus: RegisterStatus[]
   isSessionLoading: boolean
+  sessionSummary: SessionSummary | null
+  sessionHistory: { data: POSSession[]; total: number; current_page: number; last_page: number } | null
 
   // Products state
   searchResults: Product[]
@@ -89,25 +148,33 @@ interface POSState {
   removeFromCart: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   updatePrice: (productId: string, price: number) => void
-  applyDiscount: (productId: string, discount: number) => void
+  applyDiscount: (productId: string, discount: number, discountType?: 'percentage' | 'fixed') => void
+  setItemDiscountType: (productId: string, type: 'percentage' | 'fixed') => void
   clearCart: () => void
   setClient: (client: Client | null) => void
-  setDocumentType: (type: '03' | '01') => void
+  setDocumentType: (type: '00' | '03' | '01') => void
   setPaymentMethod: (method: 'cash' | 'card' | 'transfer' | 'yape_plin' | 'credit' | 'mixed') => void
   setCashReceived: (amount: number) => void
+  setGlobalDiscount: (type: 'percentage' | 'fixed', value: number) => void
 
   // API Actions
   fetchCashRegisters: () => Promise<void>
   fetchCurrentSession: () => Promise<void>
   openSession: (cashRegisterId: string, openingAmount: number) => Promise<void>
-  closeSession: () => Promise<void>
+  closeSession: (closingAmount: number, notes?: string) => Promise<POSSession>
+  registerMovement: (type: 'income' | 'expense', amount: number, description: string) => Promise<void>
+  fetchSessionSummary: () => Promise<void>
+  fetchSessionHistory: (params?: { date_from?: string; date_to?: string; cash_register_id?: string; status?: string; page?: number }) => Promise<void>
+  fetchRegistersStatus: () => Promise<void>
+  forceCloseSession: (sessionId: string, closingAmount?: number, notes?: string) => Promise<void>
   searchProducts: (query: string) => Promise<void>
   fetchFrequentProducts: () => Promise<void>
-  processSale: () => Promise<SaleResult>
+  processSale: (sendToSunat?: boolean) => Promise<SaleResult>
 
   // Computed (as functions)
   getSubtotal: () => number
   getTaxAmount: () => number
+  getGlobalDiscountAmount: () => number
   getTotal: () => number
   getChange: () => number
 }
@@ -132,9 +199,14 @@ export const usePOSStore = create<POSState>((set, get) => ({
   documentType: '03',
   paymentMethod: 'cash',
   cashReceived: 0,
+  globalDiscountType: 'percentage',
+  globalDiscountValue: 0,
   currentSession: null,
   cashRegisters: [],
+  registersStatus: [],
   isSessionLoading: false,
+  sessionSummary: null,
+  sessionHistory: null,
   searchResults: [],
   frequentProducts: [],
   isSearching: false,
@@ -157,6 +229,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       quantity,
       unitPrice: Number(product.sale_price),
       discount: 0,
+      discountType: 'percentage',
     }
 
     return { cart: [...state.cart, newItem] }
@@ -188,10 +261,18 @@ export const usePOSStore = create<POSState>((set, get) => ({
     )
   })),
 
-  applyDiscount: (productId, discount) => set((state) => ({
+  applyDiscount: (productId, discount, discountType) => set((state) => ({
     cart: state.cart.map(item =>
       item.product.id === productId
-        ? { ...item, discount }
+        ? { ...item, discount, ...(discountType ? { discountType } : {}) }
+        : item
+    )
+  })),
+
+  setItemDiscountType: (productId, type) => set((state) => ({
+    cart: state.cart.map(item =>
+      item.product.id === productId
+        ? { ...item, discountType: type, discount: 0 }
         : item
     )
   })),
@@ -200,6 +281,8 @@ export const usePOSStore = create<POSState>((set, get) => ({
     cart: [],
     selectedClient: null,
     cashReceived: 0,
+    globalDiscountType: 'percentage',
+    globalDiscountValue: 0,
     lastSale: null,
   }),
 
@@ -207,6 +290,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
   setDocumentType: (type) => set({ documentType: type }),
   setPaymentMethod: (method) => set({ paymentMethod: method }),
   setCashReceived: (amount) => set({ cashReceived: amount }),
+  setGlobalDiscount: (type, value) => set({ globalDiscountType: type, globalDiscountValue: value }),
 
   // API Actions
   fetchCashRegisters: async () => {
@@ -263,16 +347,20 @@ export const usePOSStore = create<POSState>((set, get) => ({
     }
   },
 
-  closeSession: async () => {
+  closeSession: async (closingAmount: number, notes?: string) => {
     const companyId = getCompanyId()
     if (!companyId) throw new Error('No company selected')
 
     set({ isSessionLoading: true, error: null })
     try {
-      await axios.post(`${API_URL}/companies/${companyId}/pos/close-session`, {}, {
+      const response = await axios.post(`${API_URL}/companies/${companyId}/pos/close-session`, {
+        closing_amount: closingAmount,
+        ...(notes ? { notes } : {}),
+      }, {
         headers: getAuthHeaders()
       })
-      set({ currentSession: null, isSessionLoading: false })
+      set({ currentSession: null, sessionSummary: null, isSessionLoading: false })
+      return response.data.session
     } catch (error: any) {
       set({
         isSessionLoading: false,
@@ -280,6 +368,71 @@ export const usePOSStore = create<POSState>((set, get) => ({
       })
       throw error
     }
+  },
+
+  registerMovement: async (type, amount, description) => {
+    const companyId = getCompanyId()
+    if (!companyId) throw new Error('No company selected')
+
+    await axios.post(`${API_URL}/companies/${companyId}/pos/movement`, {
+      type,
+      amount,
+      description,
+    }, { headers: getAuthHeaders() })
+  },
+
+  fetchSessionSummary: async () => {
+    const companyId = getCompanyId()
+    if (!companyId) return
+    try {
+      const response = await axios.get(`${API_URL}/companies/${companyId}/pos/summary`, {
+        headers: getAuthHeaders()
+      })
+      set({ sessionSummary: response.data.summary })
+    } catch {
+      // No open session or other error
+    }
+  },
+
+  fetchSessionHistory: async (params = {}) => {
+    const companyId = getCompanyId()
+    if (!companyId) return
+    try {
+      const response = await axios.get(`${API_URL}/companies/${companyId}/pos/sessions`, {
+        headers: getAuthHeaders(),
+        params,
+      })
+      set({ sessionHistory: response.data })
+    } catch (error: any) {
+      console.error('Error fetching session history', error)
+    }
+  },
+
+  fetchRegistersStatus: async () => {
+    const companyId = getCompanyId()
+    if (!companyId) return
+    try {
+      const response = await axios.get(`${API_URL}/companies/${companyId}/pos/registers-status`, {
+        headers: getAuthHeaders()
+      })
+      set({ registersStatus: response.data.data || [] })
+    } catch (error: any) {
+      console.error('Error fetching registers status', error)
+    }
+  },
+
+  forceCloseSession: async (sessionId, closingAmount, notes) => {
+    const companyId = getCompanyId()
+    if (!companyId) throw new Error('No company selected')
+
+    await axios.post(`${API_URL}/companies/${companyId}/pos/force-close-session/${sessionId}`, {
+      ...(closingAmount !== undefined ? { closing_amount: closingAmount } : {}),
+      ...(notes ? { notes } : {}),
+    }, { headers: getAuthHeaders() })
+
+    // Refresh statuses
+    get().fetchRegistersStatus()
+    get().fetchCashRegisters()
   },
 
   searchProducts: async (query) => {
@@ -312,17 +465,18 @@ export const usePOSStore = create<POSState>((set, get) => ({
       const response = await axios.get(`${API_URL}/companies/${companyId}/pos/frequent-products`, {
         headers: getAuthHeaders()
       })
-      set({ frequentProducts: response.data.data || response.data })
+      set({ frequentProducts: response.data.products || response.data.data || response.data || [] })
     } catch (error: any) {
       console.error('Error fetching frequent products:', error)
+      set({ frequentProducts: [] })
     }
   },
 
-  processSale: async () => {
+  processSale: async (sendToSunat?: boolean) => {
     const companyId = getCompanyId()
     if (!companyId) throw new Error('No company selected')
 
-    const { cart, selectedClient, documentType, paymentMethod, cashReceived } = get()
+    const { cart, selectedClient, documentType, paymentMethod, cashReceived, globalDiscountType, globalDiscountValue } = get()
 
     if (cart.length === 0) {
       throw new Error('El carrito está vacío')
@@ -332,16 +486,22 @@ export const usePOSStore = create<POSState>((set, get) => ({
 
     try {
       const saleData: SaleData = {
-        client_id: selectedClient?.id || null, // Explicit null if undefined
+        client_id: selectedClient?.id || null,
         document_type: documentType,
         payment_method: paymentMethod,
         items: cart.map(item => ({
           product_id: item.product.id,
           quantity: Number(item.quantity),
           unit_price: Number(item.unitPrice),
-          discount: Number(item.discount || 0)
+          discount_type: item.discountType,
+          discount_percentage: Number(item.discount || 0)
         })),
-        cash_received: paymentMethod === 'cash' ? Number(cashReceived) : undefined
+        ...(globalDiscountValue > 0 ? {
+          global_discount_type: globalDiscountType,
+          global_discount_value: Number(globalDiscountValue),
+        } : {}),
+        cash_received: paymentMethod === 'cash' ? Number(cashReceived) : undefined,
+        send_to_sunat: sendToSunat !== undefined ? sendToSunat : true,
       }
 
       const response = await axios.post<SaleResult>(`${API_URL}/companies/${companyId}/pos/sale`, saleData, {
@@ -355,15 +515,15 @@ export const usePOSStore = create<POSState>((set, get) => ({
         lastSale: result,
         cart: [],
         selectedClient: null,
-        cashReceived: 0
+        cashReceived: 0,
+        globalDiscountType: 'percentage',
+        globalDiscountValue: 0,
       })
 
       return result
     } catch (error: any) {
-      // Improve 422 error display
       let errorMessage = error.response?.data?.message || 'Error al procesar venta';
 
-      // If validation errors exist, append first one
       if (error.response?.data?.errors) {
         const firstError = Object.values(error.response.data.errors)[0];
         if (Array.isArray(firstError)) {
@@ -385,20 +545,37 @@ export const usePOSStore = create<POSState>((set, get) => ({
   getSubtotal: () => {
     const { cart } = get()
     return cart.reduce((sum, item) => {
-      const itemTotal = Number(item.quantity) * Number(item.unitPrice)
-      const discount = itemTotal * (Number(item.discount) / 100)
-      return sum + (itemTotal - discount)
+      const grossAmount = Number(item.quantity) * Number(item.unitPrice)
+      let discount = 0
+      if (item.discountType === 'fixed') {
+        discount = Number(item.discount) * Number(item.quantity)
+        discount = Math.min(discount, grossAmount)
+      } else {
+        discount = grossAmount * (Number(item.discount) / 100)
+      }
+      return sum + (grossAmount - discount)
     }, 0)
   },
 
   getTaxAmount: () => {
     const subtotal = get().getSubtotal()
-    // IGV is included in price, so we calculate base and tax
     const base = subtotal / 1.18
     return subtotal - base
   },
 
-  getTotal: () => get().getSubtotal(),
+  getGlobalDiscountAmount: () => {
+    const { globalDiscountType, globalDiscountValue } = get()
+    if (!globalDiscountValue || globalDiscountValue <= 0) return 0
+    const subtotal = get().getSubtotal()
+    if (globalDiscountType === 'fixed') return Math.min(globalDiscountValue, subtotal)
+    return subtotal * (globalDiscountValue / 100)
+  },
+
+  getTotal: () => {
+    const subtotal = get().getSubtotal()
+    const globalDiscount = get().getGlobalDiscountAmount()
+    return Math.max(0, subtotal - globalDiscount)
+  },
 
   getChange: () => {
     const { cashReceived } = get()

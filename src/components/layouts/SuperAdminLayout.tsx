@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Dialog, Transition } from '@headlessui/react';
@@ -15,6 +15,15 @@ import {
   ChevronDoubleRightIcon,
   BanknotesIcon,
   ShieldCheckIcon,
+  CpuChipIcon,
+  ChatBubbleLeftRightIcon,
+  BoltIcon,
+  AdjustmentsHorizontalIcon,
+  ChartBarIcon,
+  Squares2X2Icon,
+  EnvelopeIcon,
+  BellAlertIcon,
+  ListBulletIcon,
 } from '@heroicons/react/24/outline';
 import { Avatar, Dropdown } from '../ui';
 import { useAuthStore } from '../../stores/authStore';
@@ -26,14 +35,49 @@ interface NavigationItem {
   current?: boolean;
 }
 
-const navigation: NavigationItem[] = [
-  { name: 'Dashboard', href: '/superadmin', icon: HomeIcon },
-  { name: 'Empresas', href: '/superadmin/companies', icon: BuildingOfficeIcon },
-  { name: 'Usuarios', href: '/superadmin/users', icon: UserGroupIcon },
-  { name: 'Planes', href: '/superadmin/plans', icon: BanknotesIcon },
-  { name: 'Almacenamiento', href: '/superadmin/storage', icon: ServerIcon },
-  { name: 'Roles y Permisos', href: '/superadmin/roles', icon: ShieldCheckIcon },
-  { name: 'Configuración', href: '/superadmin/settings', icon: Cog6ToothIcon },
+interface NavigationGroup {
+  name: string;
+  items: NavigationItem[];
+}
+
+const navigationGroups: NavigationGroup[] = [
+  {
+    name: 'Principal',
+    items: [
+      { name: 'Dashboard', href: '/superadmin', icon: HomeIcon },
+      { name: 'Empresas', href: '/superadmin/companies', icon: BuildingOfficeIcon },
+    ]
+  },
+  {
+    name: 'WhatsApp',
+    items: [
+      { name: 'Chat (IA)', href: '/superadmin/chats', icon: ChatBubbleLeftRightIcon },
+      { name: 'Logs de Mensajes', href: '/superadmin/whatsapp/logs', icon: ListBulletIcon },
+      { name: 'Contactos CRM', href: '/superadmin/whatsapp/crm', icon: UserGroupIcon },
+      { name: 'Bot Builder', href: '/superadmin/whatsapp/bot-builder', icon: Squares2X2Icon },
+      { name: 'Automatizaciones', href: '/superadmin/whatsapp/automations', icon: BoltIcon },
+      { name: 'Métricas (Analytics)', href: '/superadmin/whatsapp/analytics', icon: ChartBarIcon },
+      { name: 'Configuración WA', href: '/superadmin/whatsapp/settings', icon: AdjustmentsHorizontalIcon },
+    ]
+  },
+  {
+    name: 'Gestión',
+    items: [
+      { name: 'Usuarios', href: '/superadmin/users', icon: UserGroupIcon },
+      { name: 'Planes', href: '/superadmin/plans', icon: BanknotesIcon },
+      { name: 'Alertas & Recordatorios', href: '/superadmin/alerts', icon: BellAlertIcon },
+    ]
+  },
+  {
+    name: 'Sistema',
+    items: [
+      { name: 'Cuentas de Correo', href: '/superadmin/mail', icon: EnvelopeIcon },
+      { name: 'Almacenamiento', href: '/superadmin/storage', icon: ServerIcon },
+      { name: 'Servidor', href: '/superadmin/server', icon: CpuChipIcon },
+      { name: 'Roles y Permisos', href: '/superadmin/roles', icon: ShieldCheckIcon },
+      { name: 'Configuración Global', href: '/superadmin/settings', icon: Cog6ToothIcon },
+    ]
+  }
 ];
 
 const SuperAdminLayout = ({ children }: { children: React.ReactNode }) => {
@@ -42,6 +86,16 @@ const SuperAdminLayout = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+
+  // Redirect if not superadmin
+  useEffect(() => {
+    if (user) {
+      const isSuperAdmin = user.roles?.some((r: any) => r.name === 'superadmin');
+      if (!isSuperAdmin) {
+        router.replace('/dashboard');
+      }
+    }
+  }, [user, router]);
 
   const handleLogout = () => {
     logout();
@@ -56,47 +110,55 @@ const SuperAdminLayout = ({ children }: { children: React.ReactNode }) => {
 
   const SidebarContent = ({ isMobile = false }) => (
     <div className={clsx(
-      "flex grow flex-col gap-y-5 overflow-y-auto bg-zinc-900 pb-4 transition-all duration-300",
+      "flex grow flex-col gap-y-5 overflow-y-auto bg-zinc-900 pb-4 transition-all duration-300 custom-scrollbar",
       isMobile ? "px-6" : collapsed ? "px-2 items-center" : "px-6"
     )}>
       {/* Logo */}
       <div className={clsx("flex h-16 shrink-0 items-center", collapsed && !isMobile ? "justify-center" : "gap-3")}>
-        <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-red-500/30">
-          <ShieldCheckIcon className="w-6 h-6 text-white" />
-        </div>
+        <img src="/logo_bravos.png" alt="Bravos Logo" className="w-10 h-10 object-contain" />
         {(!collapsed || isMobile) && (
-          <span className="text-xl font-bold text-white tracking-tight">SuperAdmin</span>
+          <span className="text-xl font-bold text-white tracking-tight">Bravos <span className="text-emerald-500">Admin</span></span>
         )}
       </div>
 
       {/* Navigation */}
       <nav className="flex flex-1 flex-col mt-2">
-        <ul role="list" className="flex flex-1 flex-col gap-y-7">
-          <li>
+        <ul role="list" className="flex flex-1 flex-col gap-y-6">
+          {navigationGroups.map((group, groupIdx) => (
+            <li key={group.name}>
+              {(!collapsed || isMobile) && (
+                <div className="text-xs font-semibold leading-6 text-zinc-500 uppercase tracking-wider mb-2">
+                  {group.name}
+                </div>
+              )}
+              {collapsed && !isMobile && groupIdx > 0 && (
+                <div className="w-full h-px bg-zinc-800 my-4" />
+              )}
               <ul role="list" className="-mx-2 space-y-1">
-                {navigation.map((item) => {
-                  const isActive = pathname === item.href;
+                {group.items.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
                     <li key={item.name}>
                       <Link
                         href={item.href}
                         className={clsx(
                           isActive
-                          ? 'bg-zinc-800 text-red-500'
+                          ? 'bg-zinc-800 text-emerald-500'
                           : 'text-zinc-400 hover:text-white hover:bg-zinc-800',
-                        'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold transition-colors',
-                        collapsed && !isMobile && 'justify-center'
-                      )}
-                      title={collapsed && !isMobile ? item.name : undefined}
-                    >
-                      <item.icon className={clsx("h-6 w-6 shrink-0", isActive ? "text-red-500" : "text-zinc-400 group-hover:text-white")} aria-hidden="true" />
-                      {(!collapsed || isMobile) && item.name}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </li>
+                          'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold transition-colors',
+                          collapsed && !isMobile && 'justify-center'
+                        )}
+                        title={collapsed && !isMobile ? item.name : undefined}
+                      >
+                        <item.icon className={clsx("h-6 w-6 shrink-0", isActive ? "text-emerald-500" : "text-zinc-400 group-hover:text-white")} aria-hidden="true" />
+                        {(!collapsed || isMobile) && item.name}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
         </ul>
       </nav>
     </div>

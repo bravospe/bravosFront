@@ -15,7 +15,7 @@ const processedIdsGlobal = new Set<string>();
 
 export const useNotifications = () => {
   const router = useRouter();
-  const { user, token } = useAuthStore();
+  const { user, token, currentCompany } = useAuthStore();
   const { addNotification, markAsRead } = useNotificationStore();
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -52,6 +52,12 @@ export const useNotifications = () => {
       }
       processedIdsGlobal.add(event.id);
 
+      // Multi-tenant filter: ignore notifications from other companies
+      if (event.company_id && currentCompany?.id && event.company_id !== currentCompany.id) {
+        console.log('Skipping notification from different company:', event.company_id, '!==', currentCompany.id);
+        return;
+      }
+
       // Cleanup processed ID after 2 seconds
       setTimeout(() => processedIdsGlobal.delete(event.id), 2000);
 
@@ -83,7 +89,7 @@ export const useNotifications = () => {
         channel.stopListening(eventName);
       }
     };
-  }, [user, token, addNotification]);
+  }, [user, token, currentCompany, addNotification]);
 
   const removeToast = (toastId: string) => {
     setToasts(prev => prev.filter(t => t.id !== toastId));

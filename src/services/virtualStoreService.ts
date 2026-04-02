@@ -193,6 +193,11 @@ const virtualStoreService = {
     return response.data;
   },
 
+  checkSlug: async (companyId: number, slug: string) => {
+    const response = await api.get(`/companies/${companyId}/virtual-store/settings/check-slug`, { params: { slug } });
+    return response.data as { available: boolean; slug: string; reason?: string };
+  },
+
   // Themes
   getThemes: async (companyId: number) => {
     const response = await api.get(`/companies/${companyId}/virtual-store/themes`);

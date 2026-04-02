@@ -227,16 +227,29 @@ export const useSettingsStore = create<SettingsState>()(
                 set({ isLoading: true, error: null })
 
                 try {
-                    const response = await axios.get(`${API_URL}/user/profile`, {
+                    const response = await axios.get(`${API_URL}/auth/me`, {
                         headers: getAuthHeaders()
                     })
-                    set({ profile: response.data, isLoading: false })
+                    const u = response.data?.user || response.data
+                    set({
+                        profile: {
+                            name: u.name || '',
+                            email: u.email || '',
+                            phone: u.phone || '',
+                            timezone: u.timezone || 'America/Lima',
+                            language: u.language || 'es',
+                        },
+                        isLoading: false
+                    })
+                    // Sync authStore so avatar/sidebar stay consistent with DB
+                    useAuthStore.getState().updateUser({ name: u.name, email: u.email })
                 } catch (error: any) {
                     const { user } = useAuthStore.getState()
                     set({
                         profile: {
                             name: user?.name || '',
                             email: user?.email || '',
+                            phone: '',
                             timezone: 'America/Lima',
                             language: 'es',
                         },
@@ -249,7 +262,7 @@ export const useSettingsStore = create<SettingsState>()(
                 set({ isLoading: true, error: null })
 
                 try {
-                    await axios.put(`${API_URL}/user/profile`, data, {
+                    await axios.put(`${API_URL}/auth/profile`, data, {
                         headers: getAuthHeaders()
                     })
                     set(state => ({
@@ -266,7 +279,7 @@ export const useSettingsStore = create<SettingsState>()(
                 set({ isLoading: true, error: null })
 
                 try {
-                    await axios.put(`${API_URL}/user/password`, {
+                    await axios.put(`${API_URL}/auth/password`, {
                         current_password: currentPassword,
                         password: newPassword,
                         password_confirmation: newPassword,

@@ -340,7 +340,7 @@ const SalesPage = () => {
             <thead className="bg-gray-50 dark:bg-black">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
-                  Fecha/Hora
+                  Fecha / SUNAT
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                   Documento
@@ -391,11 +391,26 @@ const SalesPage = () => {
                   <tr key={sale.id} className="hover:bg-gray-50 dark:hover:bg-[#161A22]/50">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
-                        <CalendarDaysIcon className="w-4 h-4 text-gray-400" />
+                        <CalendarDaysIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         <span className="text-sm text-gray-900 dark:text-white">
                           {formatDate(sale.created_at)}
                         </span>
                       </div>
+                      {sale.invoice && (
+                        (sale.invoice as any).accepted_at ? (
+                          <div className="flex items-center gap-1 mt-0.5 ml-6">
+                            <CheckCircleIcon className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                            <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                              {new Date((sale.invoice as any).accepted_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 mt-0.5 ml-6">
+                            <ClockIcon className="w-3 h-3 text-yellow-500 flex-shrink-0" />
+                            <span className="text-[11px] text-yellow-600 dark:text-yellow-400">Pendiente SUNAT</span>
+                          </div>
+                        )
+                      )}
                     </td>
                     <td className="px-4 py-4">
                       {sale.invoice ? (

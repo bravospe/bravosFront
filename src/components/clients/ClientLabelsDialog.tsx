@@ -137,7 +137,7 @@ const ClientLabelsDialog = ({ isOpen, onClose }: ClientLabelsDialogProps) => {
                         >
                             <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white dark:bg-black shadow-xl transition-all">
                                 {/* Header */}
-                                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-[#232834]">
+                                <div className="flex items-center justify-between py-2 px-4 border-b border-gray-200 dark:border-[#232834]">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-emerald-100 dark:bg-emerald-500/10 rounded-lg">
                                             <TagIcon className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />

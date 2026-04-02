@@ -35,7 +35,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --font-family-sans: 'Google Sans', 'Google Sans Display', system-ui, -apple-system, sans-serif;
+  --font-family-sans: 'Sora', system-ui, -apple-system, sans-serif;
 }
 
 :root {
@@ -103,7 +103,7 @@
 }
 
 body {
-  font-family: 'Google Sans', 'Google Sans Display', system-ui, -apple-system, sans-serif;
+  font-family: 'Sora', system-ui, -apple-system, sans-serif;
   background-color: var(--background);
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
@@ -361,3 +361,6 @@ body {
     width: 22rem;
   }
 }
+/* ═══ Scrollbar hide ═══ */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

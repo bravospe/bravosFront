@@ -65,7 +65,6 @@ export const mediaService = {
   async list(companyId: string, params?: {
     page?: number;
     per_page?: number;
-    collection?: string;
     images_only?: boolean;
     search?: string;
   }): Promise<MediaListResponse> {

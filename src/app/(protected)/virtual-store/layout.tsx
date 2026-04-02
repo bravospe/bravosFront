@@ -40,14 +40,30 @@ export default function VirtualStoreLayout({ children }: { children: React.React
     }
   }, [currentCompany?.id, fetchSettings]);
 
-  const getPreviewUrl = () => {
-    if (!settings) return '#';
-    if (typeof window === 'undefined') return '#';
-    // Use the same hostname the user is currently on (works for localhost AND LAN IPs)
-    const currentHost = window.location.hostname;
-    const port = process.env.NEXT_PUBLIC_STOREFRONT_PORT || '3004';
-    return `http://${currentHost}:${port}/tienda/${settings.slug}`;
+  const RESERVED_NAMES = ['app', 'api', 'www', 'shop', 'home', 'back', 'admin', 'mail', 'ftp', 'staging', 'dev'];
+
+  const isSlugValid = (slug: string) => {
+    return slug && slug.length >= 10 && !RESERVED_NAMES.includes(slug.toLowerCase());
   };
+
+  const getPreviewUrl = () => {
+    if (!settings || !isSlugValid(settings.slug)) return null;
+    if (typeof window === 'undefined') return '#';
+    
+    const currentHost = window.location.hostname;
+    const slug = settings.slug;
+    
+    // Production logic: if we are on bravos.pe domain
+    if (currentHost.includes('bravos.pe')) {
+      return `https://${slug}.bravos.pe`;
+    }
+    
+    // Local/Dev logic
+    const port = process.env.NEXT_PUBLIC_STOREFRONT_PORT || '3004';
+    return `http://${slug}.${currentHost}:${port}`;
+  };
+
+  const previewUrl = getPreviewUrl();
 
   return (
     <div className="space-y-6">
@@ -91,16 +107,27 @@ export default function VirtualStoreLayout({ children }: { children: React.React
           )}
 
           {/* Preview Button */}
-          <a
-            href={getPreviewUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-black border border-transparent rounded-lg hover:opacity-90 shadow-sm"
-            style={{ backgroundColor: '#fdf704' }}
-          >
-            <BuildingStorefrontIcon className="w-5 h-5" />
-            Ver Tienda
-          </a>
+          {previewUrl ? (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-black border border-transparent rounded-lg hover:opacity-90 shadow-sm transition-all"
+              style={{ backgroundColor: '#fdf704' }}
+            >
+              <BuildingStorefrontIcon className="w-5 h-5" />
+              Ver Tienda
+            </a>
+          ) : (
+            <button
+              disabled
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-400 bg-gray-100 dark:bg-[#1E2230] border border-transparent rounded-lg cursor-not-allowed opacity-50"
+              title="El nombre de la tienda debe tener al menos 10 caracteres y ser válido"
+            >
+              <BuildingStorefrontIcon className="w-5 h-5" />
+              Ver Tienda
+            </button>
+          )}
         </div>
       </div>
 

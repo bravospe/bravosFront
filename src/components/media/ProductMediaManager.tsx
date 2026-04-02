@@ -74,15 +74,20 @@ const SortableImageItem = ({
       ref={setNodeRef}
       style={style}
       className={clsx(
-        'relative aspect-square rounded-lg overflow-hidden border-2 group cursor-grab active:cursor-grabbing',
+        'relative aspect-square rounded-lg overflow-hidden border-2 group',
         isDragging ? 'opacity-50 border-emerald-500 z-50 shadow-xl' : 'border-gray-200 dark:border-[#232834]',
         isPrimary && 'ring-2 ring-emerald-500 ring-offset-2'
       )}
       {...attributes}
-      {...listeners}
     >
+      {/* Drag handle — covers the image area, sits below action buttons */}
+      <div
+        {...listeners}
+        className="absolute inset-0 cursor-grab active:cursor-grabbing z-0"
+      />
+
       {imageError ? (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 dark:bg-black">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 dark:bg-black pointer-events-none">
           <ExclamationTriangleIcon className="w-8 h-8 text-gray-400" />
           <span className="text-xs text-gray-500 mt-1">Error</span>
         </div>
@@ -90,7 +95,7 @@ const SortableImageItem = ({
         <img
           src={image.url}
           alt={image.name || 'Product image'}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover pointer-events-none"
           draggable={false}
           onError={() => setImageError(true)}
         />
@@ -115,7 +120,7 @@ const SortableImageItem = ({
 
       {/* Hover Actions */}
       {!image.isUploading && (
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 z-10">
           {/* Preview */}
           <button
             type="button"
@@ -145,7 +150,7 @@ const SortableImageItem = ({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className="absolute top-1 right-1 p-1 bg-red-500/90 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+          className="absolute top-1 right-1 p-1 bg-red-500/90 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
           title="Eliminar"
         >
           <XMarkIcon className="w-3 h-3" />

@@ -175,6 +175,12 @@ const POSPage = () => {
   }, [currentSession]);
 
   const handleAddProduct = (product: Product) => {
+    const stock = product.stock ?? Infinity;
+    const inCart = items.find(i => i.product.id === product.id)?.quantity ?? 0;
+    if (inCart >= stock) {
+      toast.error(`Stock máximo alcanzado (${stock})`, { duration: 1500 });
+      return;
+    }
     addToCart(product, 1);
     toast.success(`${product.name} agregado`, { duration: 800 });
   };
@@ -362,7 +368,18 @@ const POSPage = () => {
                     <div className="flex items-center bg-gray-100 dark:bg-background rounded-lg p-0.5 border border-gray-200 dark:border-white/5">
                       <button onClick={() => updateQuantity(item.product.id, item.quantity - 1)} className="w-6 h-6 rounded-md bg-white dark:bg-[#111827] text-gray-600 dark:text-white flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"><MinusIcon className="w-3 h-3" /></button>
                       <span className="w-6 text-center font-semibold text-xs dark:text-white tabular-nums">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.product.id, item.quantity + 1)} className="w-6 h-6 rounded-md bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-colors"><PlusIcon className="w-3 h-3" /></button>
+                      <button
+                        onClick={() => {
+                          const stock = item.product.stock ?? Infinity;
+                          if (item.quantity >= stock) {
+                            toast.error(`Stock máximo: ${stock}`, { duration: 1200 });
+                            return;
+                          }
+                          updateQuantity(item.product.id, item.quantity + 1);
+                        }}
+                        disabled={item.quantity >= (item.product.stock ?? Infinity)}
+                        className="w-6 h-6 rounded-md bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-500"
+                      ><PlusIcon className="w-3 h-3" /></button>
                     </div>
                     <button onClick={() => setItemDiscountModal({ isOpen: true, productId: item.product.id })} className="text-[10px] font-medium text-gray-400 hover:text-emerald-500 underline">Descuento</button>
                   </div>

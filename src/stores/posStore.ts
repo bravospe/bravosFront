@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import axios from 'axios'
 import type { Product, Client } from '@/types'
 import { useAuthStore } from './authStore'
+import { useProductStore } from './productStore'
 
 import { getApiUrl } from '@/utils/apiConfig';
 const API_URL = getApiUrl();
@@ -216,17 +217,20 @@ export const usePOSStore = create<POSState>((set, get) => ({
 
   // Cart Actions
   addToCart: (product, quantity = 1) => set((state) => {
+    const stock = product.stock ?? Infinity
     const existingIndex = state.cart.findIndex(item => item.product.id === product.id)
 
     if (existingIndex >= 0) {
+      const currentQty = state.cart[existingIndex].quantity
+      if (currentQty >= stock) return state // already at max stock
       const newCart = [...state.cart]
-      newCart[existingIndex].quantity += quantity
+      newCart[existingIndex] = { ...newCart[existingIndex], quantity: Math.min(currentQty + quantity, stock) }
       return { cart: newCart }
     }
 
     const newItem: CartItem = {
       product,
-      quantity,
+      quantity: Math.min(quantity, stock),
       unitPrice: Number(product.sale_price),
       discount: 0,
       discountType: 'percentage',
@@ -245,11 +249,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
     }
 
     return {
-      cart: state.cart.map(item =>
-        item.product.id === productId
-          ? { ...item, quantity }
-          : item
-      )
+      cart: state.cart.map(item => {
+        if (item.product.id !== productId) return item
+        const stock = item.product.stock ?? Infinity
+        return { ...item, quantity: Math.min(quantity, stock) }
+      })
     }
   }),
 
@@ -510,6 +514,20 @@ export const usePOSStore = create<POSState>((set, get) => ({
 
       const result = response.data
 
+      // Decrement stock in productStore for each sold item
+      const soldItems = cart
+      const productState = useProductStore.getState()
+      const decrementStock = (p: Product) => {
+        const soldItem = soldItems.find(item => item.product.id === p.id)
+        if (soldItem) return { ...p, stock: Math.max(0, (p.stock || 0) - soldItem.quantity) }
+        return p
+      }
+      useProductStore.setState({
+        products: productState.products.map(decrementStock),
+      })
+
+      // Also decrement in searchResults and frequentProducts within posStore
+      const { searchResults, frequentProducts } = get()
       set({
         isProcessing: false,
         lastSale: result,
@@ -518,6 +536,8 @@ export const usePOSStore = create<POSState>((set, get) => ({
         cashReceived: 0,
         globalDiscountType: 'percentage',
         globalDiscountValue: 0,
+        searchResults: searchResults.map(decrementStock),
+        frequentProducts: frequentProducts.map(decrementStock),
       })
 
       return result

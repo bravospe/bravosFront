@@ -62,6 +62,8 @@ const DashboardPage = () => {
     recentInvoices,
     topProducts,
     charts,
+    revenueChartData,
+    revenueChartLoading,
     isLoading,
     fetchDashboardStats,
     selectedPeriod,
@@ -177,8 +179,13 @@ const DashboardPage = () => {
                     </div>
                   </div>
                   {/* Chart */}
-                  <div className="flex-1 min-h-0 -mx-2">
-                    <RevenueChart data={charts?.daily_sales ?? []} />
+                  <div className="flex-1 min-h-0 -mx-2 relative">
+                    {revenueChartLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-[#111827]/60 rounded-xl z-10">
+                        <div className="w-5 h-5 border-2 border-[#85fd37] border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                    <RevenueChart data={revenueChartData} />
                   </div>
                 </div>
               )}

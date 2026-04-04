@@ -87,6 +87,8 @@ interface DashboardState {
     recentInvoices: RecentInvoice[];
     topProducts: TopProduct[];
     charts: ChartsData | null;
+    revenueChartData: DailySalesData[];
+    revenueChartLoading: boolean;
     isLoading: boolean;
     error: string | null;
     selectedPeriod: 'week' | 'month' | 'quarter' | 'year';
@@ -104,6 +106,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     recentInvoices: [],
     topProducts: [],
     charts: null,
+    revenueChartData: [],
+    revenueChartLoading: false,
     isLoading: false,
     error: null,
     selectedPeriod: 'month',
@@ -128,6 +132,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
                 recentInvoices: response.data.recent_invoices || [],
                 topProducts: response.data.top_products || [],
                 charts: response.data.charts || null,
+                revenueChartData: response.data.charts?.daily_sales ?? [],
                 isLoading: false,
             });
         } catch (error: any) {
@@ -175,10 +180,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         }
     },
 
-    setSelectedPeriod: (period) => {
-        set({ selectedPeriod: period });
-        // Solo refrescamos los gráficos al cambiar el periodo
-        get().fetchChartsOnly();
+    setSelectedPeriod: async (period) => {
+        set({ selectedPeriod: period, revenueChartLoading: true });
+        try {
+            const token = useAuthStore.getState().token;
+            if (!token) return;
+            const response = await axios.get(`${API_URL}/dashboard/stats`, {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { period },
+            });
+            set({
+                revenueChartData: response.data.charts?.daily_sales ?? [],
+                revenueChartLoading: false,
+            });
+        } catch {
+            set({ revenueChartLoading: false });
+        }
     },
 }));
 

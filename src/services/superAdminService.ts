@@ -141,6 +141,40 @@ export const superAdminService = {
       return data;
     },
   },
+
+  /**
+   * Membership Payments Management
+   */
+  payments: {
+    /**
+     * List all membership payments (with filtering)
+     */
+    async list(params?: {
+      page?: number;
+      per_page?: number;
+      status?: 'pending' | 'approved' | 'rejected';
+      search?: string;
+    }): Promise<PaginatedResponse<ManualPayment>> {
+      const { data } = await api.get<PaginatedResponse<ManualPayment>>('/admin/membership/payments', { params });
+      return data;
+    },
+
+    /**
+     * Approve a membership payment
+     */
+    async approve(paymentId: string, notes?: string): Promise<{ success: boolean; message: string }> {
+      const { data } = await api.post(`/admin/membership/payments/${paymentId}/approve`, { notes });
+      return data;
+    },
+
+    /**
+     * Reject a membership payment
+     */
+    async reject(paymentId: string, reason: string): Promise<{ success: boolean; message: string }> {
+      const { data } = await api.post(`/admin/membership/payments/${paymentId}/reject`, { reason });
+      return data;
+    },
+  },
 };
 
 export default superAdminService;

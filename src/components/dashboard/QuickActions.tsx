@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import {
   ShoppingCartIcon,
-  ChartBarIcon,
   GlobeAltIcon,
   ArchiveBoxIcon,
 } from '@heroicons/react/24/outline';
+import { ChartNoAxesCombined } from 'lucide-react';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 
 const actions = [
@@ -16,16 +16,14 @@ const actions = [
     href: '/pos',
     icon: ShoppingCartIcon,
     color: '#A855F7',
-    bg: 'rgba(168,85,247,0.15)',
     permission: 'pos.access',
   },
   {
     label: 'Reportes',
     description: 'Ver estadísticas',
     href: '/reports',
-    icon: ChartBarIcon,
+    icon: ChartNoAxesCombined,
     color: '#F59E0B',
-    bg: 'rgba(245,158,11,0.15)',
     permission: 'reports.view',
   },
   {
@@ -34,7 +32,6 @@ const actions = [
     href: '/virtual-store/settings',
     icon: GlobeAltIcon,
     color: '#EC4899',
-    bg: 'rgba(236,72,153,0.15)',
     permission: 'settings.edit',
   },
   {
@@ -43,7 +40,6 @@ const actions = [
     href: '/inventory/kardex',
     icon: ArchiveBoxIcon,
     color: '#10B981',
-    bg: 'rgba(16,185,129,0.15)',
     permission: 'inventory.view',
   },
 ];
@@ -62,17 +58,36 @@ export const QuickActions = () => {
           <Link
             key={action.href}
             href={action.href}
-            className="group rounded-[20px] bg-[#111827] border border-white/5 p-4 flex items-center gap-4 hover:bg-[#161B2E] transition-all duration-200 shadow-lg"
+            className="group relative rounded-[20px] bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/5 p-5 flex items-center gap-4 overflow-hidden transition-all duration-300 shadow-sm"
           >
+            {/* Hover fill background */}
             <div
-              className="w-[54px] h-[54px] rounded-[16px] flex items-center justify-center flex-shrink-0 shadow-inner"
-              style={{ backgroundColor: action.bg }}
-            >
-              <Icon className="w-[26px] h-[26px]" style={{ color: action.color }} />
+              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              style={{ backgroundColor: action.color }}
+            />
+
+            {/* Large icon — colored at rest, white on hover */}
+            <div className="relative z-10 flex-shrink-0">
+              {/* Colored version (rest) */}
+              <Icon
+                className="opacity-100 group-hover:opacity-0 transition-opacity duration-300"
+                style={{ color: action.color, width: 67, height: 67, marginLeft: -30, marginBottom: -30 }}
+              />
+              {/* White version (hover) */}
+              <Icon
+                className="absolute inset-0 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                style={{ width: 67, height: 67, marginLeft: -30, marginBottom: -30 }}
+              />
             </div>
-            <div className="min-w-0">
-              <p className="text-[15px] font-black text-white leading-tight tracking-tight">{action.label}</p>
-              <p className="text-[11px] text-white/40 font-medium mt-[3px]">{action.description}</p>
+
+            {/* Text */}
+            <div className="relative z-10 min-w-0">
+              <p className="text-[15px] font-black text-gray-900 dark:text-white group-hover:text-white leading-tight tracking-tight transition-colors duration-300">
+                {action.label}
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-white/50 group-hover:text-white/80 font-medium mt-[3px] transition-colors duration-300">
+                {action.description}
+              </p>
             </div>
           </Link>
         );

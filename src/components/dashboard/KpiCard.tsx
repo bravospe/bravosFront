@@ -48,7 +48,7 @@ export const KpiCard = ({
   };
 
   return (
-    <div className="rounded-[24px] bg-[#080B12] border border-white/[0.04] p-6 flex flex-col gap-4 shadow-xl">
+    <div className="rounded-[24px] bg-white dark:bg-[#080B12] border border-gray-100 dark:border-white/[0.04] p-6 flex flex-col gap-4 shadow-sm dark:shadow-xl">
       {/* Top: Icon + Badge */}
       <div className="flex items-center justify-between">
         <div
@@ -64,7 +64,7 @@ export const KpiCard = ({
                 ? 'text-[#22C55E] bg-[#22C55E]/10'
                 : isNegative
                 ? 'text-[#EF4444] bg-[#EF4444]/10'
-                : 'text-white/40 bg-white/5'
+                : 'text-gray-500 dark:text-white/40 bg-gray-100 dark:bg-white/5'
             }`}
           >
             {isPositive && '↑ '}
@@ -76,8 +76,8 @@ export const KpiCard = ({
 
       {/* Value + Label */}
       <div className="mt-1">
-        <p className="text-[28px] font-semibold text-white tracking-tight leading-none">{value}</p>
-        <p className="text-[12px] text-white/40 mt-2 font-semibold uppercase tracking-wide">{label}</p>
+        <p className="text-[28px] font-semibold text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
+        <p className="text-[12px] text-gray-500 dark:text-white/40 mt-2 font-semibold uppercase tracking-wide">{label}</p>
       </div>
 
       {/* Sparkline */}

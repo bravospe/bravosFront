@@ -260,6 +260,24 @@ export interface CartItem {
   discount: number
 }
 
+export interface ManualPayment {
+  id: string
+  company_id: string
+  company: Company
+  plan_id: string
+  plan: Plan
+  amount: number
+  currency: string
+  transaction_reference: string
+  payment_date: string
+  proof_image_url: string
+  status: 'pending' | 'approved' | 'rejected'
+  rejection_reason?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
 export interface POSSession {
   id: string
   company_id: string

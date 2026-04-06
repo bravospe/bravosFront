@@ -25,6 +25,8 @@ interface WhatsAppLog {
   created_at: string
   instance_name: string
   provider: 'wa-sender' | 'Meta API'
+  sent_by_user: string | null
+  sent_by_company: string | null
 }
 
 export default function WhatsAppLogsPage() {
@@ -125,6 +127,7 @@ export default function WhatsAppLogsPage() {
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Proveedor</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Canal / Instancia</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Destinatario</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Enviado por</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Mensaje</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Tipo / Estado</th>
               </tr>
@@ -132,7 +135,7 @@ export default function WhatsAppLogsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {logs.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     No se encontraron logs recientes.
                   </td>
                 </tr>
@@ -166,6 +169,20 @@ export default function WhatsAppLogsPage() {
                         {log.recipient}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {log.sent_by_user || log.sent_by_company ? (
+                        <div className="flex flex-col gap-0.5">
+                          {log.sent_by_user && (
+                            <span className="text-xs font-medium text-gray-900 dark:text-white">{log.sent_by_user}</span>
+                          )}
+                          {log.sent_by_company && (
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400">{log.sent_by_company}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600 dark:text-gray-300 max-w-md truncate" title={log.message}>
                         {log.message}
@@ -179,13 +196,13 @@ export default function WhatsAppLogsPage() {
                           {log.type === 'OUT' ? 'Saliente' : 'Entrante'}
                         </span>
                         <span className={`inline-flex items-center gap-1 text-xs font-medium ${
-                          log.status.toLowerCase() === 'sent' || log.status.toLowerCase() === 'received' || log.status.toLowerCase() === 'accepted'
+                          ['sent','received','accepted'].includes(log.status?.toLowerCase() ?? '')
                             ? 'text-green-600 dark:text-green-400'
-                            : log.status.toLowerCase() === 'failed' || log.status.toLowerCase() === 'rejected'
+                            : ['failed','rejected'].includes(log.status?.toLowerCase() ?? '')
                             ? 'text-red-600 dark:text-red-400'
                             : 'text-yellow-600 dark:text-yellow-400'
                         }`}>
-                          {log.status}
+                          {log.status ?? '-'}
                         </span>
                       </div>
                     </td>

@@ -13,7 +13,22 @@ interface ProductState {
     meta: PaginatedResponse<Product>['meta'] | null;
     stats: { total_products: number; active_products: number; low_stock: number; out_of_stock: number } | null;
 
-    fetchProducts: (params?: { page?: number; per_page?: number; search?: string; category_id?: string; company_id?: string }) => Promise<void>;
+    fetchProducts: (params?: {
+        page?: number;
+        per_page?: number;
+        search?: string;
+        category_id?: string;
+        brand_id?: string;
+        type?: 'product' | 'service';
+        tax_type?: string;
+        stock_status?: 'available' | 'low' | 'out';
+        price_min?: number;
+        price_max?: number;
+        is_active?: boolean;
+        sort_by?: string;
+        sort_order?: 'asc' | 'desc';
+        company_id?: string;
+    }) => Promise<void>;
     fetchStats: () => Promise<void>;
     getProduct: (id: string) => Promise<Product>;
     createProduct: (data: Partial<Product> | FormData) => Promise<Product>;
@@ -53,9 +68,18 @@ export const useProductStore = create<ProductState>((set) => ({
                 headers: { Authorization: `Bearer ${token}` },
                 params: {
                     page: params?.page || 1,
-                    per_page: params?.per_page || 10,
-                    search: params?.search,
-                    category_id: params?.category_id,
+                    per_page: params?.per_page || 15,
+                    search: params?.search || undefined,
+                    category_id: params?.category_id || undefined,
+                    brand_id: params?.brand_id || undefined,
+                    type: params?.type || undefined,
+                    tax_type: params?.tax_type || undefined,
+                    stock_status: params?.stock_status || undefined,
+                    price_min: params?.price_min ?? undefined,
+                    price_max: params?.price_max ?? undefined,
+                    is_active: params?.is_active ?? undefined,
+                    sort_by: params?.sort_by || undefined,
+                    sort_order: params?.sort_order || undefined,
                 },
             });
 

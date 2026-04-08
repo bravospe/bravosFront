@@ -48,18 +48,18 @@ export const KpiCard = ({
   };
 
   return (
-    <div className="rounded-[24px] bg-white dark:bg-[#080B12] border border-gray-100 dark:border-white/[0.04] p-6 flex flex-col gap-4 shadow-sm dark:shadow-xl">
+    <div className="rounded-[24px] bg-white dark:bg-[#080B12] border border-gray-100 dark:border-white/[0.04] p-4 sm:p-6 flex flex-col gap-3 sm:gap-4 shadow-sm dark:shadow-xl">
       {/* Top: Icon + Badge */}
       <div className="flex items-center justify-between">
         <div
-          className="w-[44px] h-[44px] rounded-[14px] flex items-center justify-center shadow-inner"
+          className="w-9 h-9 sm:w-[44px] sm:h-[44px] rounded-[12px] sm:rounded-[14px] flex items-center justify-center shadow-inner"
           style={{ backgroundColor: `${color}15` }}
         >
-          <Icon className="w-[22px] h-[22px]" style={{ color }} />
+          <Icon className="w-4 h-4 sm:w-[22px] sm:h-[22px]" style={{ color }} />
         </div>
         {change && (
           <span
-            className={`flex items-center gap-[2px] text-[12px] font-black px-3 py-1.5 rounded-full ${
+            className={`flex items-center gap-[2px] text-[10px] sm:text-[12px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-full ${
               isPositive
                 ? 'text-[#22C55E] bg-[#22C55E]/10'
                 : isNegative
@@ -76,8 +76,8 @@ export const KpiCard = ({
 
       {/* Value + Label */}
       <div className="mt-1">
-        <p className="text-[28px] font-semibold text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
-        <p className="text-[12px] text-gray-500 dark:text-white/40 mt-2 font-semibold uppercase tracking-wide">{label}</p>
+        <p className="text-[20px] sm:text-[28px] font-semibold text-gray-900 dark:text-white tracking-tight leading-none break-all">{value}</p>
+        <p className="text-[10px] sm:text-[12px] text-gray-500 dark:text-white/40 mt-2 font-semibold uppercase tracking-wide truncate">{label}</p>
       </div>
 
       {/* Sparkline */}

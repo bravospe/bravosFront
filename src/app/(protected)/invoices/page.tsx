@@ -83,7 +83,7 @@ export default function InvoicesPage() {
 
   const [showFilters, setShowFilters] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createDocType, setCreateDocType] = useState<'01' | '03'>('01');
+  const [createDocType, setCreateDocType] = useState<'01' | '03' | '00'>('01');
   const [showDetail, setShowDetail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailAddress, setEmailAddress] = useState('');
@@ -101,6 +101,7 @@ export default function InvoicesPage() {
   const [filterOptions, setFilterOptions] = useState({ users: [] as any[], cashRegisters: [] as any[] });
   const [showSunatModal, setShowSunatModal] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [rejectionInvoice, setRejectionInvoice] = useState<Invoice | null>(null);
   const currentCompany = useAuthStore(s => s.currentCompany);
   const searchParams = useSearchParams();
 
@@ -126,10 +127,17 @@ export default function InvoicesPage() {
     if (!currentCompany?.id) return;
     const fetchCount = async () => {
       try {
-        const res = await api.get(`/companies/${currentCompany.id}/invoices`, {
-          params: { sunat_status: 'pending', per_page: 1 }
-        });
-        setPendingCount(res.data?.meta?.total || 0);
+        const [resInv, resCN, resDN, resGR] = await Promise.all([
+          api.get(`/companies/${currentCompany.id}/invoices`, { params: { sunat_status: 'pending', per_page: 1 } }),
+          api.get(`/companies/${currentCompany.id}/credit-notes`, { params: { status: 'pending', per_page: 1 } }),
+          api.get(`/companies/${currentCompany.id}/debit-notes`, { params: { status: 'pending', per_page: 1 } }),
+          api.get(`/companies/${currentCompany.id}/dispatch-guides`, { params: { 'filter[status]': 'pending', per_page: 1 } }),
+        ]);
+        const total = (resInv.data?.meta?.total || 0)
+          + (resCN.data?.meta?.total || 0)
+          + (resDN.data?.meta?.total || 0)
+          + (resGR.data?.meta?.total || 0);
+        setPendingCount(total);
       } catch (e) { }
     };
     fetchCount();
@@ -306,7 +314,7 @@ export default function InvoicesPage() {
       setActionInvoice(null);
       fetchInvoices({ page: currentPage });
     } catch (err: any) {
-      toast.error(err.message || 'Error al anular');
+      toast.error(err.response?.data?.message || err.message || 'Error al anular');
     } finally { setActionLoading(null); }
   };
 
@@ -329,7 +337,7 @@ export default function InvoicesPage() {
     } finally { setActionLoading(null); }
   };
 
-  const openCreate = (type: '01' | '03') => {
+  const openCreate = (type: '01' | '03' | '00') => {
     setCreateDocType(type);
     setShowCreateModal(true);
   };
@@ -356,6 +364,9 @@ export default function InvoicesPage() {
         <div className="flex flex-wrap gap-2">
           <button onClick={handleExportExcel} disabled={isExporting} className="flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium bg-gray-100 dark:bg-[#161A22] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#1E2230] rounded-xl transition border border-gray-200 dark:border-[#232834] disabled:opacity-60">
             <ArrowDownTrayIcon className={clsx('w-4 h-4', isExporting && 'animate-bounce')} /> {isExporting ? 'Exportando...' : 'Exportar Excel'}
+          </button>
+          <button onClick={() => openCreate('00')} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition shadow-sm">
+            <PlusIcon className="w-4 h-4" /> Nueva N. Venta
           </button>
           <button onClick={() => openCreate('03')} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition shadow-sm">
             <PlusIcon className="w-4 h-4" /> Nueva Boleta
@@ -455,6 +466,8 @@ export default function InvoicesPage() {
               <option value="cash">Efectivo</option>
               <option value="card">Tarjeta</option>
               <option value="transfer">Transferencia</option>
+              <option value="yape">Yape</option>
+              <option value="plin">Plin</option>
               <option value="yape_plin">Yape / Plin</option>
               <option value="credit">Crédito</option>
               <option value="mixed">Mixto</option>
@@ -552,6 +565,14 @@ export default function InvoicesPage() {
                     <td className="px-4 py-3.5 text-center">
                       {inv.document_type === '00' || inv.document_model === 'sale' ? (
                         <span className="text-xs text-gray-400">—</span>
+                      ) : inv.sunat_status === 'rejected' ? (
+                        <button
+                          onClick={() => setRejectionInvoice(inv)}
+                          title="Ver motivo de rechazo"
+                          className={clsx('inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold cursor-pointer hover:opacity-80 transition-opacity', ss.color)}
+                        >
+                          <SIcon className="w-3 h-3" /> {ss.label}
+                        </button>
                       ) : (
                         <span className={clsx('inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold', ss.color)}>
                           <SIcon className="w-3 h-3" /> {ss.label}
@@ -706,7 +727,8 @@ export default function InvoicesPage() {
           const hasCdr = !!inv.cdr_path;
           const hasPdf = !!(inv.pdf_path || (inv.sunat_response as any)?.payload?.pdf);
           const canSend = inv.sunat_status === 'pending' || inv.sunat_status === 'rejected';
-          const canAnular = inv.sunat_status !== 'accepted' && inv.sunat_status !== 'annulled';
+          const isAcceptedSunat = inv.sunat_status === 'accepted' || inv.status === 'accepted';
+          const canAnular = inv.sunat_status !== 'annulled' && inv.status !== 'cancelled';
 
           return (
             <div className="space-y-1 py-1">
@@ -848,19 +870,29 @@ export default function InvoicesPage() {
               {/* Separador */}
               {canAnular && <div className="border-t border-gray-100 dark:border-[#232834] my-1" />}
 
-              {/* Anular */}
+              {/* Anular — para docs aceptados por SUNAT mostrar aviso; para el resto permitir */}
               {canAnular && (
-                <button
-                  onClick={() => handleAnular(inv.id)}
-                  disabled={actionLoading === 'anular'}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition"
-                >
-                  <TrashIcon className="w-5 h-5" />
-                  <div className="text-left">
-                    <p className="font-medium">Anular comprobante</p>
-                    <p className="text-xs text-red-400/70">Esta accion no se puede deshacer</p>
+                isAcceptedSunat && inv.document_model !== 'sale' ? (
+                  <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-500/10 rounded-xl">
+                    <ExclamationCircleIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Comprobante aceptado por SUNAT</p>
+                      <p className="text-xs text-amber-600/80 dark:text-amber-500/80 mt-0.5">Para anularlo debes emitir una Nota de Crédito desde el menú de creación.</p>
+                    </div>
                   </div>
-                </button>
+                ) : (
+                  <button
+                    onClick={() => handleAnular(inv.id)}
+                    disabled={actionLoading === 'anular'}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition"
+                  >
+                    <TrashIcon className="w-5 h-5" />
+                    <div className="text-left">
+                      <p className="font-medium">Anular comprobante</p>
+                      <p className="text-xs text-red-400/70">Esta acción no se puede deshacer</p>
+                    </div>
+                  </button>
+                )
               )}
             </div>
           );
@@ -872,6 +904,71 @@ export default function InvoicesPage() {
         isOpen={showSunatModal}
         onClose={() => setShowSunatModal(false)}
       />
+
+      {/* Rejection Reason Modal */}
+      {rejectionInvoice && (() => {
+        const raw = rejectionInvoice.sunat_response;
+        let parsed: any = null;
+        if (raw) {
+          try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch {}
+        }
+        const code = parsed?.code ?? '—';
+        const message = parsed?.message ?? (typeof raw === 'string' ? raw : JSON.stringify(raw)) ?? 'Sin información';
+        const docNum = String(rejectionInvoice.correlative || '').padStart(8, '0');
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setRejectionInvoice(null)}>
+            <div className="bg-white dark:bg-[#111318] rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-5" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-red-100 dark:bg-red-500/15 rounded-xl">
+                    <ExclamationCircleIcon className="w-6 h-6 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 dark:text-white text-sm">
+                      {rejectionInvoice.series}-{docNum}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {rejectionInvoice.client?.name || 'Cliente'}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setRejectionInvoice(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-400 hover:text-gray-600 transition">
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* SUNAT code */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Código SUNAT</span>
+                <span className="px-2.5 py-0.5 bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 font-mono font-bold text-sm rounded-lg">{code}</span>
+              </div>
+
+              {/* Message */}
+              <div className="bg-gray-50 dark:bg-[#0D1117] rounded-xl p-4 border border-gray-200 dark:border-white/5">
+                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Motivo del rechazo</p>
+                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{message}</p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setRejectionInvoice(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => { setActionInvoice(rejectionInvoice); setRejectionInvoice(null); openActionsModal(rejectionInvoice); }}
+                  className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition"
+                >
+                  Ver acciones
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Floating Button / Bottom Link */}
       <div className="flex justify-end pt-4">

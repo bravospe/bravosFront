@@ -395,46 +395,43 @@ const ProductMediaManager = ({
               />
             ))}
 
-            {/* Add Button */}
-            {localImages.length < maxImages && (
-              <div className="aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-[#232834] flex flex-col items-center justify-center gap-2 hover:border-emerald-500 hover:bg-gray-50 dark:hover:bg-[#161A22]/50 transition-colors">
-                <div className="flex gap-2">
-                  {/* Upload from device */}
+            {/* Botón agregar — solo cuando ya hay imágenes y hay espacio */}
+            {localImages.length > 0 && localImages.length < maxImages && (
+              <div className="aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-[#232834] flex flex-col items-center justify-center gap-1.5 hover:border-emerald-500 hover:bg-gray-50 dark:hover:bg-[#161A22]/50 transition-colors cursor-pointer">
+                <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2 rounded-lg bg-gray-100 dark:bg-[#1E2230] hover:bg-gray-200 dark:hover:bg-[#1E2230] transition-colors"
-                    title="Subir desde dispositivo"
+                    className="p-1.5 rounded-lg bg-gray-100 dark:bg-[#1E2230] hover:bg-gray-200 transition-colors"
+                    title="Subir archivo"
                   >
-                    <PlusIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <PlusIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                   </button>
-                  
-                  {/* Open gallery */}
                   <button
                     type="button"
                     onClick={() => setShowGallery(true)}
-                    className="p-2 rounded-lg bg-gray-100 dark:bg-[#1E2230] hover:bg-gray-200 dark:hover:bg-[#1E2230] transition-colors"
-                    title="Seleccionar de galería"
+                    className="p-1.5 rounded-lg bg-gray-100 dark:bg-[#1E2230] hover:bg-gray-200 transition-colors"
+                    title="Galería"
                   >
-                    <Squares2X2Icon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <Squares2X2Icon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                   </button>
                 </div>
-                <span className="text-xs text-gray-500 dark:text-gray-400">Agregar</span>
+                <span className="text-[11px] text-gray-400">Agregar</span>
               </div>
             )}
 
-            {/* Empty State */}
+            {/* Estado vacío — ocupa todo el ancho y reemplaza al botón de agregar */}
             {localImages.length === 0 && !dragOver && (
-              <div className="col-span-3 flex flex-col items-center justify-center py-8">
-                <PhotoIcon className="w-12 h-12 text-gray-300 dark:text-gray-600" />
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                  Arrastra imágenes aquí o usa los botones para agregar
+              <div className="col-span-3 flex flex-col items-center justify-center py-6 gap-3">
+                <PhotoIcon className="w-10 h-10 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                  Arrastrá imágenes aquí o usá los botones
                 </p>
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
                   >
                     <PlusIcon className="w-4 h-4" />
                     Subir
@@ -442,7 +439,7 @@ const ProductMediaManager = ({
                   <button
                     type="button"
                     onClick={() => setShowGallery(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-[#1E2230] rounded-lg hover:bg-gray-200 dark:hover:bg-[#1E2230]"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-[#1E2230] rounded-lg hover:bg-gray-200"
                   >
                     <Squares2X2Icon className="w-4 h-4" />
                     Galería

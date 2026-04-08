@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { clsx } from 'clsx';
 import {
   MagnifyingGlassIcon,
@@ -14,11 +14,15 @@ import {
   XCircleIcon,
   DocumentTextIcon,
   MapPinIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Badge, Card, Modal, Input } from '@/components/ui';
+import UbigeoSelector from '@/components/ui/UbigeoSelector';
+import SunatQueueModal from '@/components/invoices/SunatQueueModal';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import toast from 'react-hot-toast';
+import { CloudArrowUpIcon } from '@heroicons/react/24/outline';
 
 interface DispatchGuide {
   id: string;
@@ -95,7 +99,7 @@ const EMPTY_FORM = {
   gross_weight: '',
   vehicle_plate: '',
   driver_name: '',
-  driver_document_type: 'DNI',
+  driver_document_type: '1',
   driver_document_number: '',
   driver_license: '',
 };
@@ -112,8 +116,19 @@ export default function DispatchGuidesPage() {
   const [selectedGuide, setSelectedGuide] = useState<DispatchGuide | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSunatModal, setShowSunatModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Items
+  const [items, setItems] = useState<{ key: number; product_id: string; product_name: string; quantity: number; is_manual: boolean }[]>([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [productResults, setProductResults] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [productHighlight, setProductHighlight] = useState(-1);
+  const [manualMode, setManualMode] = useState(false);
+  const productSearchRef = useRef<HTMLInputElement>(null);
+  let itemKeyRef = useRef(0);
 
   const fetchGuides = useCallback(async () => {
     if (!currentCompany) return;
@@ -138,6 +153,48 @@ export default function DispatchGuidesPage() {
     fetchGuides();
   }, [fetchGuides]);
 
+  const openCreateModal = () => {
+    setShowCreateModal(true);
+    setItems([]);
+    setForm(EMPTY_FORM);
+    setProductSearch('');
+    setManualMode(false);
+  };
+
+  const searchProducts = useCallback(async (q: string) => {
+    if (!currentCompany || q.length < 2) { setProductResults([]); return; }
+    try {
+      const res = await api.get(`/companies/${currentCompany.id}/products`, { params: { search: q, per_page: 10 } });
+      const data = res.data?.data || res.data;
+      setProductResults(Array.isArray(data) ? data : []);
+      setProductHighlight(-1);
+    } catch { setProductResults([]); }
+  }, [currentCompany]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { if (productSearch.length >= 2) searchProducts(productSearch); else setProductResults([]); }, 300);
+    return () => clearTimeout(t);
+  }, [productSearch, searchProducts]);
+
+  const addItem = (product: { id: string; name: string; code: string }) => {
+    const existing = items.find((i) => i.product_id === product.id);
+    if (existing) {
+      setItems((prev) => prev.map((i) => i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
+    } else {
+      setItems((prev) => [...prev, { key: ++itemKeyRef.current, product_id: product.id, product_name: product.name, quantity: 1, is_manual: false }]);
+    }
+    setProductSearch('');
+    setShowProductDropdown(false);
+  };
+
+  const addManualItem = () => {
+    setItems((prev) => [...prev, { key: ++itemKeyRef.current, product_id: '', product_name: '', quantity: 1, is_manual: true }]);
+  };
+
+  const removeItem = (key: number) => setItems((prev) => prev.filter((i) => i.key !== key));
+  const updateItem = (key: number, field: string, value: string | number) =>
+    setItems((prev) => prev.map((i) => i.key === key ? { ...i, [field]: value } : i));
+
   const handleViewDetail = async (guide: DispatchGuide) => {
     try {
       const res = await api.get(`/companies/${currentCompany!.id}/dispatch-guides/${guide.id}`);
@@ -154,6 +211,11 @@ export default function DispatchGuidesPage() {
       toast.error('Completa los campos requeridos');
       return;
     }
+    if (items.length === 0) { toast.error('Agrega al menos un producto'); return; }
+    const emptyManual = items.find((i) => i.is_manual && !i.product_name.trim());
+    if (emptyManual) { toast.error('Completa la descripción de los productos manuales'); return; }
+    const validItems = items.filter((i) => i.quantity > 0).map((i) => ({ product_id: i.product_id || undefined, quantity: i.quantity, description: i.is_manual ? i.product_name : undefined }));
+
 
     setIsSaving(true);
     try {
@@ -173,7 +235,7 @@ export default function DispatchGuidesPage() {
         driver_document_type: form.driver_document_type || undefined,
         driver_document_number: form.driver_document_number || undefined,
         driver_license: form.driver_license || undefined,
-        items: [{ product_id: 'placeholder', quantity: 1 }], // Mínimo requerido
+        items: validItems,
       };
       if (form.client_id) payload.client_id = form.client_id;
 
@@ -233,7 +295,7 @@ export default function DispatchGuidesPage() {
             <ArrowPathIcon className={clsx('w-5 h-5 mr-2', isLoading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button onClick={openCreateModal}>
             <PlusIcon className="w-5 h-5 mr-2" />
             Nueva Guía
           </Button>
@@ -508,7 +570,7 @@ export default function DispatchGuidesPage() {
       {/* Create Modal */}
       <Modal
         isOpen={showCreateModal}
-        onClose={() => { setShowCreateModal(false); setForm(EMPTY_FORM); }}
+        onClose={() => { setShowCreateModal(false); setForm(EMPTY_FORM); setItems([]); setProductSearch(''); }}
         title="Nueva Guía de Remisión"
         size="lg"
       >
@@ -564,49 +626,65 @@ export default function DispatchGuidesPage() {
 
           <div className="border-t border-gray-200 dark:border-[#232834] pt-4">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Ruta</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección de Origen *</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Av. Industrial 123, Lima"
-                  value={form.origin_address}
-                  onChange={(e) => setField('origin_address', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
-                />
+            <div className="space-y-4">
+              {/* Origen */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección de Origen *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Av. Industrial 123"
+                    value={form.origin_address}
+                    onChange={(e) => setField('origin_address', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full p-3 rounded-lg bg-gray-50 dark:bg-[#1E2230] border border-gray-200 dark:border-[#232834] text-xs text-gray-400 leading-relaxed">
+                    <p className="font-semibold text-gray-500 dark:text-gray-300 mb-0.5">Ubigeo origen</p>
+                    {form.origin_ubigeo
+                      ? <span className="font-mono text-emerald-500 font-bold">{form.origin_ubigeo}</span>
+                      : <span className="italic">Se completa al seleccionar el distrito</span>}
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ubigeo Origen *</label>
-                <input
-                  type="text"
-                  placeholder="Ej: 150101"
-                  maxLength={6}
-                  value={form.origin_ubigeo}
-                  onChange={(e) => setField('origin_ubigeo', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
-                />
+              <UbigeoSelector
+                label="Ubicación de Origen"
+                value={form.origin_ubigeo}
+                onChange={(ubigeo) => setField('origin_ubigeo', ubigeo)}
+                required
+              />
+
+              {/* Separador */}
+              <div className="border-t border-dashed border-gray-200 dark:border-[#232834]" />
+
+              {/* Destino */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección de Destino *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Jr. Comercio 456"
+                    value={form.destination_address}
+                    onChange={(e) => setField('destination_address', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full p-3 rounded-lg bg-gray-50 dark:bg-[#1E2230] border border-gray-200 dark:border-[#232834] text-xs text-gray-400 leading-relaxed">
+                    <p className="font-semibold text-gray-500 dark:text-gray-300 mb-0.5">Ubigeo destino</p>
+                    {form.destination_ubigeo
+                      ? <span className="font-mono text-emerald-500 font-bold">{form.destination_ubigeo}</span>
+                      : <span className="italic">Se completa al seleccionar el distrito</span>}
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección de Destino *</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Jr. Comercio 456, Callao"
-                  value={form.destination_address}
-                  onChange={(e) => setField('destination_address', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ubigeo Destino *</label>
-                <input
-                  type="text"
-                  placeholder="Ej: 070101"
-                  maxLength={6}
-                  value={form.destination_ubigeo}
-                  onChange={(e) => setField('destination_ubigeo', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
-                />
-              </div>
+              <UbigeoSelector
+                label="Ubicación de Destino"
+                value={form.destination_ubigeo}
+                onChange={(ubigeo) => setField('destination_ubigeo', ubigeo)}
+                required
+              />
             </div>
           </div>
 
@@ -623,7 +701,20 @@ export default function DispatchGuidesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">DNI / Documento</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo Doc. Conductor</label>
+                <select
+                  value={form.driver_document_type}
+                  onChange={(e) => setField('driver_document_type', e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                >
+                  <option value="1">DNI</option>
+                  <option value="4">Carné de Extranjería</option>
+                  <option value="7">Pasaporte</option>
+                  <option value="A">Cédula Diplomática</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">N° Documento Conductor</label>
                 <input
                   type="text"
                   value={form.driver_document_number}
@@ -655,8 +746,107 @@ export default function DispatchGuidesPage() {
             </div>
           </div>
 
+          <div className="border-t border-gray-200 dark:border-[#232834] pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Productos *</p>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={manualMode}
+                  onChange={(e) => setManualMode(e.target.checked)}
+                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                />
+                Modo manual
+              </label>
+            </div>
+
+            {manualMode ? (
+              <button
+                type="button"
+                onClick={addManualItem}
+                className="w-full mb-3 py-2.5 rounded-xl border-2 border-dashed border-emerald-300 dark:border-emerald-600/50 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition flex items-center justify-center gap-2"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Agregar producto manual
+              </button>
+            ) : (
+              <div className="relative mb-3">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    ref={productSearchRef}
+                    value={productSearch}
+                    onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
+                    onFocus={() => productSearch.length >= 2 && setShowProductDropdown(true)}
+                    onKeyDown={(e) => {
+                      if (!showProductDropdown || productResults.length === 0) return;
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setProductHighlight((p) => Math.min(p + 1, productResults.length - 1)); }
+                      else if (e.key === 'ArrowUp') { e.preventDefault(); setProductHighlight((p) => Math.max(p - 1, 0)); }
+                      else if (e.key === 'Enter' && productHighlight >= 0) { e.preventDefault(); addItem(productResults[productHighlight]); setProductHighlight(-1); }
+                      else if (e.key === 'Escape') { setShowProductDropdown(false); setProductHighlight(-1); }
+                    }}
+                    placeholder="Buscar producto por nombre o código..."
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-300 dark:border-[#232834] bg-white dark:bg-black text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                {showProductDropdown && productResults.length > 0 && (
+                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-[#161A22] rounded-xl border border-gray-200 dark:border-[#2A3244] shadow-xl max-h-48 overflow-y-auto">
+                    {productResults.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { addItem(p); setProductHighlight(-1); }}
+                        className={clsx(
+                          'w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 dark:border-[#232834] last:border-0',
+                          idx === productHighlight ? 'bg-emerald-50 dark:bg-emerald-500/15' : 'hover:bg-gray-50 dark:hover:bg-[#0D1117]'
+                        )}
+                      >
+                        <span className="font-medium text-gray-900 dark:text-white">{p.name}</span>
+                        {p.code && <span className="ml-2 text-xs text-gray-400">{p.code}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {items.length > 0 && (
+              <div className="space-y-2">
+                {items.map((item) => (
+                  <div key={item.key} className="flex gap-2 items-center">
+                    {item.is_manual ? (
+                      <input
+                        type="text"
+                        placeholder="Descripción del producto"
+                        value={item.product_name}
+                        onChange={(e) => updateItem(item.key, 'product_name', e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black text-sm"
+                      />
+                    ) : (
+                      <span className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-[#232834] bg-gray-50 dark:bg-[#161A22] text-sm text-gray-700 dark:text-gray-300 truncate">
+                        {item.product_name}
+                      </span>
+                    )}
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(item.key, 'quantity', parseFloat(e.target.value) || 0)}
+                      className="w-24 px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black text-sm"
+                      placeholder="Cant."
+                    />
+                    <button type="button" onClick={() => removeItem(item.key)} className="p-2 text-red-400 hover:text-red-600">
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-2">
-            <Button variant="secondary" fullWidth onClick={() => { setShowCreateModal(false); setForm(EMPTY_FORM); }}>
+            <Button variant="secondary" fullWidth onClick={() => { setShowCreateModal(false); setForm(EMPTY_FORM); setItems([]); setProductSearch(''); }}>
               Cancelar
             </Button>
             <Button fullWidth onClick={handleCreate} loading={isSaving}>
@@ -666,6 +856,18 @@ export default function DispatchGuidesPage() {
           </div>
         </div>
       </Modal>
+
+      <SunatQueueModal isOpen={showSunatModal} onClose={() => setShowSunatModal(false)} />
+
+      <div className="flex justify-end pt-4">
+        <button
+          onClick={() => setShowSunatModal(true)}
+          className="relative flex items-center gap-2 px-4 py-2 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl transition border border-emerald-200 dark:border-emerald-500/30 shadow-sm bg-white dark:bg-[#0D1117]"
+        >
+          <CloudArrowUpIcon className="w-5 h-5" />
+          Conexión SUNAT
+        </button>
+      </div>
     </div>
   );
 }

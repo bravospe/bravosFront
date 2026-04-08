@@ -39,19 +39,10 @@ const getCompanyId = () => {
     return user?.current_company_id || user?.companies?.[0]?.id
 }
 
-// Default labels with colors
-const defaultLabels: ClientLabel[] = [
-    { id: '1', name: 'VIP', color: '#8B5CF6', clients_count: 0 },
-    { id: '2', name: 'Frecuente', color: '#10B981', clients_count: 0 },
-    { id: '3', name: 'Nuevo', color: '#3B82F6', clients_count: 0 },
-    { id: '4', name: 'Mayorista', color: '#F59E0B', clients_count: 0 },
-    { id: '5', name: 'Moroso', color: '#EF4444', clients_count: 0 },
-]
-
 export const useLabelStore = create<LabelState>()(
     persist(
         (set, get) => ({
-            labels: defaultLabels,
+            labels: [],
             isLoading: false,
             error: null,
 
@@ -152,10 +143,8 @@ export const useLabelStore = create<LabelState>()(
             clearError: () => set({ error: null })
         }),
         {
-            name: 'bravos-client-labels',
-            partialize: (state) => ({
-                labels: state.labels,
-            }),
+            name: 'bravos-client-labels-v2',
+            partialize: () => ({}),
         }
     )
 )

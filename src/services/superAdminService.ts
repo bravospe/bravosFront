@@ -175,6 +175,83 @@ export const superAdminService = {
       return data;
     },
   },
+
+  /**
+   * Background Worker / Invoice Engine Monitoring
+   */
+  worker: {
+    /**
+     * Get global worker status (heartbeat, queue size, etc.)
+     */
+    async getStatus(): Promise<{
+      success: boolean;
+      data: {
+        is_running: boolean;
+        last_heartbeat: string;
+        queue_size: number;
+        processed_last_24h: number;
+        error_count_last_24h: number;
+        uptime: string;
+      };
+    }> {
+      try {
+        const { data } = await api.get('/admin/worker/status');
+        return data;
+      } catch (err: any) {
+        if (err.response?.status === 404) {
+          // Retornar estado offline seguro si no existe el endpoint
+          return {
+            success: true,
+            data: {
+              is_running: false,
+              last_heartbeat: new Date().toISOString(),
+              queue_size: 0,
+              processed_last_24h: 0,
+              error_count_last_24h: 0,
+              uptime: '0%'
+            }
+          };
+        }
+        throw err;
+      }
+    },
+
+    /**
+     * Get real-time logs of processing across all companies
+     */
+    async getLogs(params?: {
+      page?: number;
+      per_page?: number;
+      status?: string;
+      company_id?: string;
+    }): Promise<any> {
+      try {
+        const { data } = await api.get('/admin/worker/logs', { params });
+        return data;
+      } catch (err: any) {
+        if (err.response?.status === 404) {
+          return { success: true, data: { logs: [], pagination: {} } };
+        }
+        throw err;
+      }
+    },
+
+    /**
+     * Push all pending SUNAT documents into the queue immediately
+     */
+    async push(): Promise<{ success: boolean; message: string; queue_size?: number }> {
+      const { data } = await api.post('/admin/worker/push');
+      return data;
+    },
+
+    /**
+     * Force restart the background service (if stuck)
+     */
+    async restart(): Promise<{ success: boolean; message: string }> {
+      const { data } = await api.post('/admin/worker/restart');
+      return data;
+    },
+  },
 };
 
 export default superAdminService;

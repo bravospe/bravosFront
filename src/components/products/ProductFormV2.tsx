@@ -371,9 +371,17 @@ const ProductFormV2 = ({ productId }: Props) => {
             }
 
             router.push('/products');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            toast.error('Error al guardar producto');
+            const responseData = error?.response?.data;
+            if (responseData?.existing_product_id) {
+                toast.error('Ya existe un producto con ese código. Redirigiendo a edición…');
+                router.push(`/products/${responseData.existing_product_id}/edit`);
+            } else if (responseData?.message) {
+                toast.error(responseData.message);
+            } else {
+                toast.error('Error al guardar producto');
+            }
         }
     };
 

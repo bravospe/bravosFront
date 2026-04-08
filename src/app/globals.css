@@ -168,6 +168,16 @@ body {
   animation: loupe-move 1s linear infinite;
 }
 
+/* Línea de escaneo del lector de código de barras */
+@keyframes scan-line {
+  0%   { top: 4px; }
+  100% { top: calc(100% - 4px); }
+}
+.animate-scan-line {
+  position: absolute;
+  animation: scan-line 1.8s ease-in-out infinite alternate;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

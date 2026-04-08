@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useMemo } from 'react';
 import { Tab, Menu, Transition } from '@headlessui/react';
 import {
   PlusIcon,
@@ -9,15 +9,19 @@ import {
   TrashIcon,
   TagIcon,
   UsersIcon,
-  FunnelIcon,
   ArrowPathIcon,
   EllipsisVerticalIcon,
-  ClockIcon
+  ClockIcon,
+  BuildingOffice2Icon,
+  UserIcon,
+  XMarkIcon,
+  ChevronUpDownIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui';
 import LabelSelect from '@/components/ui/LabelSelect';
 import { useClientStore } from '@/stores/clientStore';
 import { useLabelStore } from '@/stores/labelStore';
+import { useClientCategoryStore } from '@/stores/clientCategoryStore';
 import ClientLabelsDialog from '@/components/clients/ClientLabelsDialog';
 import ClientModal from '@/components/clients/ClientModal';
 import ClientHistoryModal from '@/components/clients/ClientHistoryModal';
@@ -25,12 +29,21 @@ import clsx from 'clsx';
 import { Client } from '@/types';
 import toast from 'react-hot-toast';
 
+type DocumentTypeFilter = 'all' | 'empresa' | 'persona';
+type StatusFilter = 'all' | 'active' | 'inactive';
+type SortOption = 'name_asc' | 'name_desc' | 'newest' | 'oldest';
+
 export default function ClientsPage() {
   const { clients, isLoading: clientsLoading, meta, fetchClients, deleteClient } = useClientStore();
   const { labels, fetchLabels } = useLabelStore();
+  const { categories, fetchCategories } = useClientCategoryStore();
 
   const [search, setSearch] = useState('');
   const [selectedLabel, setSelectedLabel] = useState<string | undefined>();
+  const [selectedCategory, setSelectedCategory] = useState<number | undefined>();
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<DocumentTypeFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [page, setPage] = useState(1);
 
   // Client Modal State
@@ -44,13 +57,52 @@ export default function ClientsPage() {
   const [isLabelsDialogOpen, setIsLabelsDialogOpen] = useState(false);
 
   useEffect(() => {
-    // Use label_id for filtering
-    fetchClients({ page, search, label_id: selectedLabel });
-  }, [page, search, selectedLabel, fetchClients]);
+    fetchClients({ page, search, label_id: selectedLabel, category_id: selectedCategory });
+  }, [page, search, selectedLabel, selectedCategory, fetchClients]);
 
   useEffect(() => {
     fetchLabels();
-  }, [fetchLabels]);
+    fetchCategories();
+  }, [fetchLabels, fetchCategories]);
+
+  // Client-side filters (document type & status) applied on top of server-side results
+  const filteredClients = useMemo(() => {
+    let result = [...clients];
+
+    if (documentTypeFilter === 'empresa') {
+      result = result.filter(c => c.document_type === 'RUC');
+    } else if (documentTypeFilter === 'persona') {
+      result = result.filter(c => ['DNI', 'CE', 'PASAPORTE'].includes(c.document_type));
+    }
+
+    if (statusFilter === 'active') {
+      result = result.filter(c => c.is_active);
+    } else if (statusFilter === 'inactive') {
+      result = result.filter(c => !c.is_active);
+    }
+
+    result.sort((a, b) => {
+      if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'es');
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name, 'es');
+      if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      // newest
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+    return result;
+  }, [clients, documentTypeFilter, statusFilter, sortBy]);
+
+  const hasActiveFilters = selectedLabel || selectedCategory || documentTypeFilter !== 'all' || statusFilter !== 'all';
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setSelectedLabel(undefined);
+    setSelectedCategory(undefined);
+    setDocumentTypeFilter('all');
+    setStatusFilter('all');
+    setSortBy('newest');
+    setPage(1);
+  };
 
   // Client Handlers
   const handleCreateClient = () => {
@@ -146,59 +198,181 @@ export default function ClientsPage() {
           <Tab.Panel className="focus:outline-none">
             <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-gray-100 dark:border-[#232834] overflow-visible"> {/* overflow-visible for dropdown */}
               {/* Filters Bar */}
-              <div className="p-4 border-b border-gray-100 dark:border-[#232834] bg-gray-50/50 dark:bg-[#161A22]/50">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  {/* Search Input */}
+              <div className="p-4 border-b border-gray-100 dark:border-[#232834] bg-gray-50/50 dark:bg-[#161A22]/50 space-y-3">
+                {/* Row 1: Search + Sort */}
+                <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                      <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
                     </div>
                     <input
                       type="text"
-                      className="block w-full h-10 pl-10 pr-4 rounded-xl bg-white dark:bg-[#0D1117] text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-200 dark:ring-[#232834] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all sm:text-sm"
-                      placeholder="Buscar por nombre, documento o email..."
+                      className="block w-full h-10 pl-9 pr-4 rounded-xl bg-white dark:bg-[#0D1117] text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-200 dark:ring-[#232834] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all text-sm"
+                      placeholder="Buscar por nombre, RUC, DNI o email..."
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                     />
                   </div>
+                  <div className="relative w-full sm:w-48">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as SortOption)}
+                      className="w-full h-10 pl-3 pr-8 rounded-xl bg-white dark:bg-[#0D1117] text-gray-700 dark:text-gray-200 text-sm ring-1 ring-inset ring-gray-200 dark:ring-[#232834] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none cursor-pointer"
+                    >
+                      <option value="newest">Más reciente</option>
+                      <option value="oldest">Más antiguo</option>
+                      <option value="name_asc">Nombre A–Z</option>
+                      <option value="name_desc">Nombre Z–A</option>
+                    </select>
+                    <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
 
-                  {/* Label Filter */}
-                  <div className="w-full sm:w-[240px]">
+                {/* Row 2: Tipo de cliente + Estado + Categoría + Etiqueta */}
+                <div className="flex flex-wrap gap-2 items-center">
+                  {/* Tipo de cliente pills */}
+                  <div className="flex items-center gap-1 bg-white dark:bg-[#0D1117] rounded-xl ring-1 ring-gray-200 dark:ring-[#232834] p-1">
+                    {(
+                      [
+                        { value: 'all' as DocumentTypeFilter, label: 'Todos', icon: null },
+                        { value: 'empresa' as DocumentTypeFilter, label: 'Empresa', icon: BuildingOffice2Icon },
+                        { value: 'persona' as DocumentTypeFilter, label: 'Persona Natural', icon: UserIcon },
+                      ]
+                    ).map(({ value, label, icon: Icon }) => (
+                      <button
+                        key={value}
+                        onClick={() => { setDocumentTypeFilter(value); setPage(1); }}
+                        className={clsx(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150',
+                          documentTypeFilter === value
+                            ? 'bg-emerald-500 text-white shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E2230]'
+                        )}
+                      >
+                        {Icon && <Icon className="w-3.5 h-3.5" />}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Estado pills */}
+                  <div className="flex items-center gap-1 bg-white dark:bg-[#0D1117] rounded-xl ring-1 ring-gray-200 dark:ring-[#232834] p-1">
+                    {([
+                      { value: 'all', label: 'Todos' },
+                      { value: 'active', label: 'Activo' },
+                      { value: 'inactive', label: 'Inactivo' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => { setStatusFilter(value); setPage(1); }}
+                        className={clsx(
+                          'px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150',
+                          statusFilter === value
+                            ? value === 'active'
+                              ? 'bg-blue-500 text-white shadow-sm'
+                              : value === 'inactive'
+                              ? 'bg-red-500 text-white shadow-sm'
+                              : 'bg-emerald-500 text-white shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E2230]'
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Categoría dropdown */}
+                  {categories.length > 0 && (
+                    <div className="relative w-44">
+                      <select
+                        value={selectedCategory ?? ''}
+                        onChange={(e) => { setSelectedCategory(e.target.value ? Number(e.target.value) : undefined); setPage(1); }}
+                        className="w-full h-9 pl-3 pr-8 rounded-xl bg-white dark:bg-[#0D1117] text-gray-700 dark:text-gray-200 text-xs ring-1 ring-inset ring-gray-200 dark:ring-[#232834] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none cursor-pointer"
+                      >
+                        <option value="">Categoría</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                      <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                    </div>
+                  )}
+
+                  {/* Etiqueta */}
+                  <div className="w-44">
                     <LabelSelect
                       labels={labels}
                       value={selectedLabel}
-                      onChange={setSelectedLabel}
-                      placeholder="Filtrar por etiqueta"
+                      onChange={(val) => { setSelectedLabel(val); setPage(1); }}
+                      placeholder="Etiqueta"
                     />
                   </div>
                 </div>
+
+                {/* Row 3: Active filter chips + clear */}
+                {hasActiveFilters && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-xs text-gray-400">Filtros activos:</span>
+                    {documentTypeFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium border border-emerald-500/20">
+                        {documentTypeFilter === 'empresa' ? 'Empresa' : 'Persona Natural'}
+                        <button onClick={() => setDocumentTypeFilter('all')}><XMarkIcon className="w-3 h-3" /></button>
+                      </span>
+                    )}
+                    {statusFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium border border-blue-500/20">
+                        {statusFilter === 'active' ? 'Activo' : 'Inactivo'}
+                        <button onClick={() => setStatusFilter('all')}><XMarkIcon className="w-3 h-3" /></button>
+                      </span>
+                    )}
+                    {selectedCategory && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-medium border border-purple-500/20">
+                        {categories.find(c => Number(c.id) === selectedCategory)?.name ?? 'Categoría'}
+                        <button onClick={() => setSelectedCategory(undefined)}><XMarkIcon className="w-3 h-3" /></button>
+                      </span>
+                    )}
+                    {selectedLabel && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs font-medium border border-orange-500/20">
+                        {labels.find(l => l.id === selectedLabel)?.name ?? 'Etiqueta'}
+                        <button onClick={() => setSelectedLabel(undefined)}><XMarkIcon className="w-3 h-3" /></button>
+                      </span>
+                    )}
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 underline underline-offset-2 transition-colors ml-1"
+                    >
+                      Limpiar todo
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Table */}
-              <div className="overflow-x-auto min-h-[400px]"> {/* min-h prevents dropdown cut-off on small lists */}
+              <div className="overflow-x-auto min-h-[400px]">
                 <table className="min-w-full divide-y divide-gray-100 dark:divide-[#232834]">
                   <thead className="bg-gray-50 dark:bg-[#161A22]">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Documento</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo / Doc.</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Etiquetas</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Contacto</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
                       <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-black divide-y divide-gray-100 dark:divide-[#232834]">
                     {clientsLoading ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center">
+                        <td colSpan={6} className="px-6 py-12 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                             <p className="text-gray-500 dark:text-gray-400">Cargando clientes...</p>
                           </div>
                         </td>
                       </tr>
-                    ) : clients.length === 0 ? (
+                    ) : filteredClients.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center">
+                        <td colSpan={6} className="px-6 py-12 text-center">
                           <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
                             <div className="w-16 h-16 bg-gray-100 dark:bg-[#1E2230] rounded-full flex items-center justify-center mb-4">
                               <UsersIcon className="w-8 h-8 text-gray-400" />
@@ -214,7 +388,7 @@ export default function ClientsPage() {
                         </td>
                       </tr>
                     ) : (
-                      clients.map((client) => (
+                      filteredClients.map((client) => (
                         <tr key={client.id} className="group hover:bg-gray-50 dark:hover:bg-[#161A22]/60 transition-colors duration-150 relative">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-4">
@@ -232,12 +406,20 @@ export default function ClientsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">
-                                {client.document_type}
+                            <div className="flex flex-col gap-1">
+                              <span className={clsx(
+                                'inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md text-xs font-semibold',
+                                client.document_type === 'RUC'
+                                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                                  : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
+                              )}>
+                                {client.document_type === 'RUC'
+                                  ? <><BuildingOffice2Icon className="w-3 h-3" /> Empresa</>
+                                  : <><UserIcon className="w-3 h-3" /> Persona Natural</>
+                                }
                               </span>
-                              <span className="text-sm font-medium text-gray-900 dark:text-gray-200 font-mono">
-                                {client.document_number}
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 font-mono">
+                                {client.document_type} {client.document_number}
                               </span>
                             </div>
                           </td>
@@ -284,6 +466,17 @@ export default function ClientsPage() {
                                 <span className="text-xs text-gray-400 italic">No disponible</span>
                               )}
                             </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={clsx(
+                              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium',
+                              client.is_active
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-gray-200 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400'
+                            )}>
+                              <span className={clsx('w-1.5 h-1.5 rounded-full', client.is_active ? 'bg-emerald-500' : 'bg-gray-400')} />
+                              {client.is_active ? 'Activo' : 'Inactivo'}
+                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             {/* Desktop Actions */}
@@ -390,7 +583,10 @@ export default function ClientsPage() {
               {meta && meta.last_page > 1 && (
                 <div className="px-6 py-4 border-t border-gray-100 dark:border-[#232834] bg-gray-50/50 dark:bg-[#161A22]/50 flex items-center justify-between">
                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                    Mostrando <span className="font-medium text-gray-900 dark:text-white">{meta.from}</span> - <span className="font-medium text-gray-900 dark:text-white">{meta.to}</span> de <span className="font-medium text-gray-900 dark:text-white">{meta.total}</span> resultados
+                    {documentTypeFilter !== 'all' || statusFilter !== 'all'
+                      ? <><span className="font-medium text-gray-900 dark:text-white">{filteredClients.length}</span> de {meta.total} clientes (filtrado)</>
+                      : <>Mostrando <span className="font-medium text-gray-900 dark:text-white">{meta.from}</span> – <span className="font-medium text-gray-900 dark:text-white">{meta.to}</span> de <span className="font-medium text-gray-900 dark:text-white">{meta.total}</span> resultados</>
+                    }
                   </div>
                   <div className="flex gap-2">
                     <Button

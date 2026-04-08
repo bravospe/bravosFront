@@ -58,7 +58,7 @@ export const QuickActions = () => {
           <Link
             key={action.href}
             href={action.href}
-            className="group relative rounded-[20px] bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/5 p-5 flex items-center gap-4 overflow-hidden transition-all duration-300 shadow-sm"
+            className="group relative rounded-[20px] bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/5 p-3 sm:p-5 flex items-center gap-2 sm:gap-4 overflow-hidden transition-all duration-300 shadow-sm"
           >
             {/* Hover fill background */}
             <div
@@ -71,21 +71,21 @@ export const QuickActions = () => {
               {/* Colored version (rest) */}
               <Icon
                 className="opacity-100 group-hover:opacity-0 transition-opacity duration-300"
-                style={{ color: action.color, width: 67, height: 67, marginLeft: -30, marginBottom: -30 }}
+                style={{ color: action.color, width: 54, height: 54, marginLeft: -20, marginBottom: -20 }}
               />
               {/* White version (hover) */}
               <Icon
                 className="absolute inset-0 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                style={{ width: 67, height: 67, marginLeft: -30, marginBottom: -30 }}
+                style={{ width: 54, height: 54, marginLeft: -20, marginBottom: -20 }}
               />
             </div>
 
             {/* Text */}
             <div className="relative z-10 min-w-0">
-              <p className="text-[15px] font-black text-gray-900 dark:text-white group-hover:text-white leading-tight tracking-tight transition-colors duration-300">
+              <p className="text-[13px] sm:text-[15px] font-black text-gray-900 dark:text-white group-hover:text-white leading-tight tracking-tight transition-colors duration-300 truncate">
                 {action.label}
               </p>
-              <p className="text-[11px] text-gray-500 dark:text-white/50 group-hover:text-white/80 font-medium mt-[3px] transition-colors duration-300">
+              <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-white/50 group-hover:text-white/80 font-medium mt-[3px] transition-colors duration-300 line-clamp-1">
                 {action.description}
               </p>
             </div>

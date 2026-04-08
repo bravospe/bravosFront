@@ -24,8 +24,10 @@ export interface SalesReportData {
         total_purchases: number
         amount: number
     }>
-    by_payment_method: Array<{ method: string; count: number; amount: number }>
-    by_document_type: Array<{ type: string; count: number; amount: number }>
+    by_payment_method: Array<{ label: string; count: number; amount: number }>
+    by_document_type: Array<{ label: string; count: number; amount: number }>
+    by_seller: Array<{ label: string; count: number; amount: number }>
+    by_cash_register: Array<{ label: string; count: number; amount: number }>
     daily_sales: Array<{ date: string; count: number; amount: number }>
 }
 
@@ -126,10 +128,11 @@ export const useReportsStore = create<ReportsState>((set, get) => ({
             const params = { start_date: range.from, end_date: range.to }
             const headers = getAuthHeaders()
 
-            const [salesRes, productsRes, clientsRes] = await Promise.all([
+            const [salesRes, productsRes, clientsRes, breakdownRes] = await Promise.all([
                 axios.get(`${API_URL}/companies/${companyId}/reports/sales`, { headers, params }),
                 axios.get(`${API_URL}/companies/${companyId}/reports/sales/by-product`, { headers, params }),
                 axios.get(`${API_URL}/companies/${companyId}/reports/sales/by-client`, { headers, params }),
+                axios.get(`${API_URL}/companies/${companyId}/reports/sales/breakdown`, { headers, params }).catch(() => ({ data: {} })),
             ])
 
             const summary = salesRes.data.summary || {}
@@ -157,8 +160,10 @@ export const useReportsStore = create<ReportsState>((set, get) => ({
                     average_ticket: Number(summary.average_ticket || 0),
                     top_products: topProducts,
                     top_clients: topClients,
-                    by_payment_method: [],
-                    by_document_type: [],
+                    by_payment_method: breakdownRes.data?.by_payment_method || [],
+                    by_document_type: breakdownRes.data?.by_document_type || [],
+                    by_seller: breakdownRes.data?.by_seller || [],
+                    by_cash_register: breakdownRes.data?.by_cash_register || [],
                     daily_sales: [],
                 },
                 isLoading: false,

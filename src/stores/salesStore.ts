@@ -94,6 +94,7 @@ interface SalesFilters {
   date_to?: string
   client_id?: string
   seller_id?: string
+  cash_register_id?: string
   payment_method?: string
   status?: string
   document_type?: string

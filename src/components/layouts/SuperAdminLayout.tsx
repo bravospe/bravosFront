@@ -72,8 +72,8 @@ const navigationGroups: NavigationGroup[] = [
     name: 'Sistema',
     items: [
       { name: 'Cuentas de Correo', href: '/superadmin/mail', icon: EnvelopeIcon },
+      { name: 'Monitor del Motor', href: '/superadmin/worker-monitor', icon: CpuChipIcon },
       { name: 'Almacenamiento', href: '/superadmin/storage', icon: ServerIcon },
-      { name: 'Servidor', href: '/superadmin/server', icon: CpuChipIcon },
       { name: 'Roles y Permisos', href: '/superadmin/roles', icon: ShieldCheckIcon },
       { name: 'Configuración Global', href: '/superadmin/settings', icon: Cog6ToothIcon },
     ]

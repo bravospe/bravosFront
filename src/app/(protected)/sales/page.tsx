@@ -18,6 +18,8 @@ import {
   CheckCircleIcon,
   XCircleIcon,
 } from '@heroicons/react/24/outline';
+import { useAuthStore } from '@/stores/authStore';
+import api from '@/lib/api';
 import { Button, Card, Modal, Badge } from '@/components/ui';
 import { useSalesStore, type SaleWithRelations } from '@/stores/salesStore';
 import SaleDetailModal from '@/components/sales/SaleDetailModal';
@@ -66,6 +68,26 @@ const SalesPage = () => {
   const [showStats, setShowStats] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [filterOptions, setFilterOptions] = useState({ users: [] as any[], cashRegisters: [] as any[] });
+  const currentCompany = useAuthStore(s => s.currentCompany);
+
+  useEffect(() => {
+    const cid = currentCompany?.id;
+    if (!cid) return;
+    const loadFilters = async () => {
+      try {
+        const [resU, resC] = await Promise.all([
+          api.get(`/companies/${cid}/users`),
+          api.get(`/companies/${cid}/cash-registers`),
+        ]);
+        setFilterOptions({
+          users: resU.data?.data || [],
+          cashRegisters: resC.data?.data || [],
+        });
+      } catch (e) { }
+    };
+    loadFilters();
+  }, [currentCompany?.id]);
 
   // Load sales on mount and filter change
   useEffect(() => {
@@ -257,13 +279,11 @@ const SalesPage = () => {
       {/* Filters Panel */}
       {showFilters && (
         <Card className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Método de Pago
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Método de Pago</label>
               <select
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white"
                 value={filters.payment_method || ''}
                 onChange={(e) => setFilters({ payment_method: e.target.value || undefined })}
               >
@@ -271,16 +291,17 @@ const SalesPage = () => {
                 <option value="cash">Efectivo</option>
                 <option value="card">Tarjeta</option>
                 <option value="transfer">Transferencia</option>
-                <option value="yape_plin">Yape/Plin</option>
+                <option value="yape">Yape</option>
+                <option value="plin">Plin</option>
+                <option value="yape_plin">Yape / Plin</option>
                 <option value="credit">Crédito</option>
+                <option value="mixed">Mixto</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Estado
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Estado</label>
               <select
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white"
                 value={filters.status || ''}
                 onChange={(e) => setFilters({ status: e.target.value || undefined })}
               >
@@ -290,11 +311,9 @@ const SalesPage = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Tipo Documento
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Tipo Documento</label>
               <select
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white"
                 value={filters.document_type || ''}
                 onChange={(e) => setFilters({ document_type: e.target.value || undefined })}
               >
@@ -303,32 +322,54 @@ const SalesPage = () => {
                 <option value="01">Factura</option>
               </select>
             </div>
-            {filters.period === 'custom' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Desde
-                  </label>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Vendedor</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white"
+                value={filters.seller_id || ''}
+                onChange={(e) => setFilters({ seller_id: e.target.value || undefined })}
+              >
+                <option value="">Todos</option>
+                {filterOptions.users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Caja</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white"
+                value={filters.cash_register_id || ''}
+                onChange={(e) => setFilters({ cash_register_id: e.target.value || undefined })}
+              >
+                <option value="">Todas</option>
+                {filterOptions.cashRegisters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col">
+              {filters.period === 'custom' && (
+                <>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Desde</label>
                   <input
                     type="date"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white mb-2"
                     value={filters.date_from || ''}
                     onChange={(e) => setFilters({ date_from: e.target.value || undefined })}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Hasta
-                  </label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Hasta</label>
                   <input
                     type="date"
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-[#161A22] text-sm text-gray-900 dark:text-white"
                     value={filters.date_to || ''}
                     onChange={(e) => setFilters({ date_to: e.target.value || undefined })}
                   />
-                </div>
-              </>
-            )}
+                </>
+              )}
+              <button
+                onClick={resetFilters}
+                className="mt-auto px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-600/30 transition"
+              >
+                Limpiar
+              </button>
+            </div>
           </div>
         </Card>
       )}

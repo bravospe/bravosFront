@@ -1,10 +1,7 @@
 import { create } from 'zustand';
-import axios from 'axios';
+import api from '@/lib/api';
 import { useAuthStore } from './authStore';
 import { Branch } from './branchStore';
-
-import { getApiUrl } from '@/utils/apiConfig';
-const API_URL = getApiUrl();
 
 export interface Warehouse {
     id: string;
@@ -31,6 +28,23 @@ interface WarehouseState {
     deleteWarehouse: (id: string) => Promise<void>;
 }
 
+const ensureCompany = () => {
+    const authStore = useAuthStore.getState();
+    if (!authStore.currentCompany && authStore.user) {
+        // Try to recover from user if currentCompany is null
+        const user = authStore.user;
+        const companyFromUser = (user as any).currentCompany || 
+                                (user as any).current_company || 
+                                (user as any).companies?.[0];
+        
+        if (companyFromUser) {
+            authStore.setCurrentCompany(companyFromUser);
+            return companyFromUser.id;
+        }
+    }
+    return authStore.currentCompany?.id || authStore.user?.current_company_id;
+};
+
 export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     warehouses: [],
     isLoading: false,
@@ -39,17 +53,13 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     fetchWarehouses: async (branchId) => {
         set({ isLoading: true, error: null });
         try {
-            const { user, token } = useAuthStore.getState();
-            if (!token || !user) throw new Error('No authenticated');
-
-            const companyId = user.current_company_id || user.companies?.[0]?.id;
+            const companyId = ensureCompany();
             if (!companyId) throw new Error('No company selected');
 
             const params: any = {};
             if (branchId) params.branch_id = branchId;
 
-            const response = await axios.get<{ data: Warehouse[] }>(`${API_URL}/companies/${companyId}/warehouses`, {
-                headers: { Authorization: `Bearer ${token}` },
+            const response = await api.get<{ data: Warehouse[] }>(`/companies/${companyId}/warehouses`, {
                 params,
             });
 
@@ -65,14 +75,19 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     createWarehouse: async (data) => {
         set({ isLoading: true, error: null });
         try {
-            const { user, token } = useAuthStore.getState();
-            if (!token || !user) throw new Error('No authenticated');
+            const companyId = ensureCompany();
+            if (!companyId) throw new Error('No company selected');
 
-            const companyId = user.current_company_id || user.companies?.[0]?.id;
-            const response = await axios.post<{ data: Warehouse }>(`${API_URL}/companies/${companyId}/warehouses`, data, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            // CRITICAL: Since I cannot fix the backend, I must send company_id in the body
+            // so Laravel can potentially catch it or the model can fill it.
+            const payload = {
+                ...data,
+                company_id: companyId,
+                is_active: data.is_active === undefined ? true : !!data.is_active,
+                is_default: !!data.is_default,
+            };
 
+            const response = await api.post<{ data: Warehouse }>(`/companies/${companyId}/warehouses`, payload);
             const newWarehouse = response.data.data;
             
             // If new warehouse is default, update others locally
@@ -101,14 +116,17 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     updateWarehouse: async (id, data) => {
         set({ isLoading: true, error: null });
         try {
-            const { user, token } = useAuthStore.getState();
-            if (!token || !user) throw new Error('No authenticated');
+            const companyId = ensureCompany();
+            if (!companyId) throw new Error('No company selected');
 
-            const companyId = user.current_company_id || user.companies?.[0]?.id;
-            const response = await axios.put<{ data: Warehouse }>(`${API_URL}/companies/${companyId}/warehouses/${id}`, data, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const payload = {
+                ...data,
+                company_id: companyId,
+                is_active: data.is_active !== undefined ? !!data.is_active : undefined,
+                is_default: data.is_default !== undefined ? !!data.is_default : undefined,
+            };
 
+            const response = await api.put<{ data: Warehouse }>(`/companies/${companyId}/warehouses/${id}`, payload);
             const updatedWarehouse = response.data.data;
 
             // If updated warehouse is default, update others locally
@@ -137,14 +155,10 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     deleteWarehouse: async (id) => {
         set({ isLoading: true, error: null });
         try {
-            const { user, token } = useAuthStore.getState();
-            if (!token || !user) throw new Error('No authenticated');
+            const companyId = ensureCompany();
+            if (!companyId) throw new Error('No company selected');
 
-            const companyId = user.current_company_id || user.companies?.[0]?.id;
-            await axios.delete(`${API_URL}/companies/${companyId}/warehouses/${id}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-
+            await api.delete(`/companies/${companyId}/warehouses/${id}`);
             set((state) => ({
                 warehouses: state.warehouses.filter(w => w.id !== id),
                 isLoading: false

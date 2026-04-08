@@ -106,9 +106,9 @@ export const RecentSalesList = ({ invoices: initialInvoices }: RecentSalesListPr
   )`;
 
   return (
-    <div className="relative h-full flex flex-col" style={{ minHeight: 330 }}>
+    <div className="relative h-full flex flex-col shadow-xl rounded-[24px]" style={{ minHeight: 330 }}>
       <div
-        className="bg-[#DDDDDD] rounded-[24px] shadow-xl flex-1 flex flex-col overflow-hidden"
+        className="bg-[#DDDDDD] rounded-[24px] flex-1 flex flex-col overflow-hidden"
         style={{ paddingTop: `${NOTCH_H + 10}px`, clipPath }}
       >
         <div className="flex-1 overflow-y-auto px-3 pb-3">

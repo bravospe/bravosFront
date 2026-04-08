@@ -42,6 +42,7 @@ import {
   UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { Avatar, Dropdown, Modal, LaserLoader } from '../ui'; // Asumiendo que existe Modal
+import BottomNav from './BottomNav';
 import ImageWithFallback from '../ui/ImageWithFallback';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -83,10 +84,10 @@ const navigation: NavigationItem[] = [
     name: 'Comprobantes',
     icon: DocumentTextIcon,
     children: [
-      { name: 'Facturas y Boletas', href: '/invoices', icon: DocumentTextIcon },
-      { name: 'Notas de Venta', href: '/invoices/sales-notes', icon: ReceiptRefundIcon },
+      { name: 'Todas las Ventas', href: '/invoices', icon: DocumentTextIcon },
       { name: 'Guías de Remisión', href: '/invoices/dispatch-guides', icon: TruckIcon },
       { name: 'Cotizaciones', href: '/proformas', icon: ClipboardDocumentListIcon },
+      { name: 'Notas Déb. y Créd.', href: '/invoices/credit-debit-notes', icon: ReceiptRefundIcon },
     ],
   },
   { name: 'Clientes', href: '/clients', icon: UsersIcon },
@@ -155,6 +156,7 @@ const PERMISSION_MAP: Record<string, string> = {
   '/invoices': 'invoices.view',
   '/invoices/sales-notes': 'invoices.view',
   '/invoices/dispatch-guides': 'invoices.view',
+  '/invoices/credit-debit-notes': 'invoices.view',
   '/proformas': 'invoices.view',
   '/clients': 'clients.view',
   '/products': 'products.view',
@@ -289,8 +291,7 @@ const SidebarItem = ({
 
   // Common styles - CoinVex Dark Premium Theme
   const itemClasses = (active: boolean) => clsx(
-    'flex items-center rounded-xl transition-all duration-200 outline-none group relative overflow-visible h-[44px]',
-    // Always fixed padding to keep icon static. No justify-center.
+    'flex items-center rounded-xl transition-all duration-200 outline-none group relative overflow-visible h-[38px] md:h-[44px]',
     'w-full pl-[3px]',
     active
       ? 'text-white font-bold'
@@ -298,12 +299,12 @@ const SidebarItem = ({
   );
 
   const iconContainerClasses = (active: boolean) => clsx(
-    'flex items-center justify-center rounded-lg transition-all duration-200 w-10 h-10 flex-shrink-0',
+    'flex items-center justify-center rounded-lg transition-all duration-200 w-8 h-8 md:w-10 md:h-10 flex-shrink-0',
     active ? 'bg-emerald-500/15 shadow-sm' : 'bg-transparent'
   );
 
   const iconClasses = (active: boolean) => clsx(
-    'w-6 h-6 stroke-[1.5] transition-transform duration-200',
+    'w-4 h-4 md:w-6 md:h-6 stroke-[1.5] transition-transform duration-200',
     active ? 'text-emerald-400 stroke-2' : 'text-gray-500 group-hover:text-gray-300 group-hover:scale-105'
   );
 
@@ -326,15 +327,15 @@ const SidebarItem = ({
                     </div>
                   )}
                   <span className={clsx(
-                    "text-[15px] tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 origin-left block",
-                    !collapsed ? "w-auto opacity-100 ml-4" : "w-0 opacity-0 ml-0"
+                    "text-[12px] md:text-[15px] tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 origin-left block",
+                    !collapsed ? "w-auto opacity-100 ml-2 md:ml-4" : "w-0 opacity-0 ml-0"
                   )}>
                     {item.name}
                   </span>
                 </div>
 
                 {!collapsed && (
-                  <ChevronRightIcon className={clsx("w-4 h-4 text-gray-500 transition-transform ml-auto mr-4", open ? "rotate-90" : "")} />
+                  <ChevronRightIcon className={clsx("hidden md:block w-4 h-4 text-gray-500 transition-transform ml-auto mr-4", open ? "rotate-90" : "")} />
                 )}
               </Menu.Button>
 
@@ -501,25 +502,25 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
           <>
             <Menu.Button
               className={clsx(
-                'flex items-center rounded-xl transition-all duration-200 outline-none group relative h-[44px]',
+                'flex items-center rounded-xl transition-all duration-200 outline-none group relative h-[38px] md:h-[44px]',
                 'w-full pl-[3px]',
                 open ? 'text-white' : 'text-gray-400 hover:text-white'
               )}
             >
               <div className={clsx(
-                'flex items-center justify-center rounded-full transition-all duration-200 w-10 h-10 flex-shrink-0',
+                'flex items-center justify-center rounded-full transition-all duration-200 w-8 h-8 md:w-10 md:h-10 flex-shrink-0',
                 open ? 'ring-2 ring-emerald-500/60' : 'ring-1 ring-gray-600 group-hover:ring-gray-400'
               )}>
                 <Avatar src={user?.avatar} name={user?.name || 'U'} size="md" />
               </div>
               <div className={clsx(
                 "flex flex-col items-start overflow-hidden transition-all duration-300 origin-left",
-                !collapsed ? "w-auto opacity-100 ml-3" : "w-0 opacity-0 ml-0"
+                !collapsed ? "w-auto opacity-100 ml-2 md:ml-3" : "w-0 opacity-0 ml-0"
               )}>
-                <span className="text-[14px] font-semibold text-white leading-tight truncate max-w-[130px]">
+                <span className="text-[11px] md:text-[14px] font-semibold text-white leading-tight truncate max-w-[90px] md:max-w-[130px]">
                   {user?.name || 'Usuario'}
                 </span>
-                <span className="text-[11px] text-gray-500 truncate max-w-[130px]">
+                <span className="text-[10px] md:text-[11px] text-gray-500 truncate max-w-[90px] md:max-w-[130px]">
                   {currentCompany?.name || 'Mi Empresa'}
                 </span>
               </div>
@@ -601,14 +602,14 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
       <div
         className={clsx(
           'flex grow flex-col h-full bg-transparent transition-all duration-300',
-          isMobile ? 'px-4' : 'px-3', // Standardized padding for desktop to prevent icon jump
+          isMobile ? 'px-2' : 'px-3', // Standardized padding for desktop to prevent icon jump
           // FIX: Ensure overflow is visible so flyout menus can be seen outside the sidebar bounds
           'overflow-visible'
         )}
       >
         {/* Logo Area (Instagram style) */}
-        <div className={clsx('flex items-center h-[72px] mb-2', collapsed && !isMobile ? 'justify-center' : 'px-2')}>
-          <Link href="/dashboard" className="flex items-center gap-3 group">
+        <div className={clsx('flex items-center h-[56px] md:h-[72px] mb-1 md:mb-2', collapsed && !isMobile ? 'justify-center' : 'px-1 md:px-2')}>
+          <Link href="/dashboard" className="flex items-center gap-2 md:gap-3 group">
             {collapsed && !isMobile ? (
               // Icon only
               <div className="w-[44px] h-[44px] flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105">
@@ -616,11 +617,11 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
               </div>
             ) : (
               // Full Logo
-              <div className="flex items-center gap-3 transition-transform hover:scale-105">
-                <div className="w-[44px] h-[44px] flex items-center justify-center flex-shrink-0">
-                  <img src="/logo_bravos.png" alt="Bravos Logo" className="w-8 h-8 object-contain" />
+              <div className="flex items-center gap-2 md:gap-3 transition-transform hover:scale-105">
+                <div className="w-8 h-8 md:w-[44px] md:h-[44px] flex items-center justify-center flex-shrink-0">
+                  <img src="/logo_bravos.png" alt="Bravos Logo" className="w-6 h-6 md:w-8 md:h-8 object-contain" />
                 </div>
-                <span className="font-bold text-2xl tracking-tight text-white">Bravos</span>
+                <span className="font-bold text-lg md:text-2xl tracking-tight text-white">Bravos</span>
               </div>
             )}
           </Link>
@@ -628,7 +629,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-visible py-2">
-          <ul className="space-y-2">
+          <ul className="space-y-0.5 md:space-y-2">
             {navigation.map((item) => (
               <SidebarItem
                 key={item.name}
@@ -653,12 +654,12 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
             <button
               onClick={() => handleAction('notifications')}
               className={clsx(
-                'flex items-center rounded-xl transition-all duration-200 outline-none w-full pl-[3px] h-[44px]',
+                'flex items-center rounded-xl transition-all duration-200 outline-none w-full pl-[3px] h-[38px] md:h-[44px]',
                 'text-gray-400 hover:text-white'
               )}
             >
-              <div className="relative flex items-center justify-center rounded-lg transition-all duration-200 w-10 h-10 flex-shrink-0 bg-transparent">
-                <BellIcon className="w-6 h-6 stroke-[1.5] text-gray-500 group-hover:text-gray-300 group-hover:scale-105 transition-transform duration-200" />
+              <div className="relative flex items-center justify-center rounded-lg transition-all duration-200 w-8 h-8 md:w-10 md:h-10 flex-shrink-0 bg-transparent">
+                <BellIcon className="w-4 h-4 md:w-6 md:h-6 stroke-[1.5] text-gray-500 group-hover:text-gray-300 group-hover:scale-105 transition-transform duration-200" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-black px-1">
                     {unreadCount > 99 ? '99+' : unreadCount}
@@ -666,8 +667,8 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                 )}
               </div>
               <span className={clsx(
-                "text-[15px] tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 origin-left block",
-                !((!isSidebarExpanded && !isMobile)) ? "w-auto opacity-100 ml-4" : "w-0 opacity-0 ml-0"
+                "text-[12px] md:text-[15px] tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 origin-left block",
+                !((!isSidebarExpanded && !isMobile)) ? "w-auto opacity-100 ml-2 md:ml-4" : "w-0 opacity-0 ml-0"
               )}>
                 Notificaciones
               </span>
@@ -688,7 +689,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className={clsx(
-      "min-h-screen font-sans flex flex-row",
+      "min-h-screen font-sans flex flex-row overflow-x-hidden",
       usePathname() === '/pos' ? "bg-transparent" : "bg-[#F1F3F6] dark:bg-[#080B12]"
     )}>
       <LaserLoader />
@@ -808,7 +809,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
               leaveFrom="translate-x-0"
               leaveTo="-translate-x-full"
             >
-              <Dialog.Panel className="relative mr-16 flex w-full max-w-[280px] flex-1 bg-[#0D1117] border-r border-[#232834] shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+              <Dialog.Panel className="relative mr-16 flex w-full max-w-[216px] flex-1 bg-[#0D1117] border-r border-[#232834] shadow-[0_0_30px_rgba(0,0,0,0.5)]">
                 <Transition.Child
                   as={Fragment}
                   enter="ease-in-out duration-300"
@@ -866,7 +867,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
       {/* Main content */}
       <div
         className={clsx(
-          'flex flex-col flex-1 transition-all duration-300 ease-in-out',
+          'flex flex-col flex-1 min-w-0 overflow-x-hidden transition-all duration-300 ease-in-out',
           usePathname() === '/pos' ? 'h-screen overflow-hidden' : 'min-h-screen',
           // El padding del contenido SOLO responde al estado 'collapsed' (fijo/locked),
           // NO al hover temporal. Así el contenido no salta.
@@ -912,9 +913,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
         {/* Page content */}
         <main className={clsx(
           "flex-1 overflow-x-hidden",
-          usePathname() === '/pos' ? 'p-0 overflow-hidden' : 'p-4 sm:p-6 lg:p-8'
+          usePathname() === '/pos' ? 'p-0 overflow-hidden' : 'p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8'
         )}>
-          <div className={clsx("mx-auto", usePathname() === '/pos' ? 'max-w-full h-full' : 'max-w-7xl h-full')}>
+          <div className={clsx("mx-auto w-full", usePathname() === '/pos' ? 'max-w-full h-full' : 'max-w-7xl h-full')}>
             {children}
           </div>
         </main>
@@ -925,6 +926,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
           onNotificationClick={handleToastClick}
         />
       </div>
+
+      {/* Bottom navigation — mobile only, hidden on /pos */}
+      <BottomNav />
     </div>
   );
 };

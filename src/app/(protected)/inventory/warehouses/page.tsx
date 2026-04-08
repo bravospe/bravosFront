@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { PlusIcon, PencilIcon, TrashIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
-import { Button } from '@/components/ui';
+import { PlusIcon, PencilIcon, TrashIcon, ArchiveBoxIcon, MapPinIcon } from '@heroicons/react/24/outline';
+import { Button, Select } from '@/components/ui';
 import { useWarehouseStore, Warehouse } from '@/stores/warehouseStore';
 import { useBranchStore } from '@/stores/branchStore';
 import WarehouseModal from '@/components/inventory/WarehouseModal';
@@ -19,7 +19,6 @@ export default function WarehousesPage() {
     }, [fetchBranches]);
 
     useEffect(() => {
-        // Fetch warehouses, optionally filtered by selected branch
         fetchWarehouses(selectedBranch || undefined);
     }, [fetchWarehouses, selectedBranch]);
 
@@ -35,16 +34,25 @@ export default function WarehousesPage() {
 
     const handleDelete = async (id: string) => {
         if (confirm('¿Estás seguro de eliminar este almacén?')) {
-            await deleteWarehouse(id);
+            try {
+                await deleteWarehouse(id);
+                toast.success('Almacén eliminado correctamente');
+            } catch (err: any) {
+                toast.error(err.response?.data?.message || 'Error al eliminar el almacén');
+            }
         }
     };
 
-    // Helper to get branch name
     const getBranchName = (branchId?: string) => {
         if (!branchId) return 'Sin Sede Asignada';
         const branch = branches.find(b => b.id === branchId);
         return branch ? branch.name : 'Sede Desconocida';
     };
+
+    const branchOptions = branches.map(b => ({
+        value: b.id,
+        label: b.name
+    }));
 
     return (
         <div className="space-y-6">
@@ -55,20 +63,16 @@ export default function WarehousesPage() {
                         Gestiona los almacenes físicos y virtuales de tu inventario
                     </p>
                 </div>
-                <div className="flex gap-3 w-full sm:w-auto">
-                    <select
-                        value={selectedBranch}
-                        onChange={(e) => setSelectedBranch(e.target.value)}
-                        className="block w-full sm:w-auto rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:bg-[#1E2230] dark:border-[#232834] dark:text-white sm:text-sm"
-                    >
-                        <option value="">Todas las Sedes</option>
-                        {branches.map((branch) => (
-                            <option key={branch.id} value={branch.id}>
-                                {branch.name}
-                            </option>
-                        ))}
-                    </select>
-                    <Button onClick={handleCreate} className="whitespace-nowrap">
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-end sm:items-center">
+                    <div className="w-full sm:w-64">
+                        <Select
+                            placeholder="Todas las Sedes"
+                            options={branchOptions}
+                            value={selectedBranch}
+                            onChange={(e) => setSelectedBranch(e.target.value)}
+                        />
+                    </div>
+                    <Button onClick={handleCreate} className="w-full sm:w-auto">
                         <PlusIcon className="h-5 w-5 mr-2" />
                         Nuevo Almacén
                     </Button>

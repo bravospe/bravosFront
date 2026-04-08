@@ -55,7 +55,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onCreated: () => void;
-  defaultDocumentType?: '01' | '03';
+  defaultDocumentType?: '01' | '03' | '00';
 }
 
 let itemKeyCounter = 0;
@@ -64,7 +64,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
   const { user } = useAuthStore();
   const companyId = user?.current_company_id || user?.companies?.[0]?.id;
 
-  const [documentType, setDocumentType] = useState<'01' | '03'>(defaultDocumentType);
+  const [documentType, setDocumentType] = useState<'01' | '03' | '00'>(defaultDocumentType);
   const [currency, setCurrency] = useState('PEN');
   const [exchangeRate, setExchangeRate] = useState(1);
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
@@ -111,7 +111,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
   // Reset on open
   useEffect(() => {
     if (isOpen) {
-      setDocumentType(defaultDocumentType);
+      setDocumentType(defaultDocumentType as '01' | '03' | '00');
       setCurrency('PEN');
       setExchangeRate(1);
       setIssueDate(new Date().toISOString().split('T')[0]);
@@ -276,46 +276,62 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
     return acc;
   }, { subtotal: 0, igv: 0, discount: 0, total: 0 });
 
+  const isNotaVenta = documentType === '00';
+
   const handleSubmit = async () => {
-    if (!selectedClient) { toast.error('Selecciona un cliente'); return; }
+    if (!isNotaVenta && !selectedClient) { toast.error('Selecciona un cliente'); return; }
     if (items.length === 0) { toast.error('Agrega al menos un producto'); return; }
     const emptyManual = items.find(i => i.is_manual && !i.product_name.trim());
     if (emptyManual) { toast.error('Completa la descripción de los productos manuales'); return; }
-    if (documentType === '01' && selectedClient.document_type !== 'RUC') {
+    if (documentType === '01' && selectedClient?.document_type !== 'RUC') {
       toast.error('Para facturas se requiere un cliente con RUC');
       return;
     }
 
     setSubmitting(true);
     try {
-      const payload = {
-        document_type: documentType,
-        client_id: selectedClient.id,
-        currency,
-        exchange_rate: currency === 'USD' ? exchangeRate : 1,
-        issue_date: issueDate,
-        due_date: dueDate || undefined,
-        payment_method: paymentMethod,
-        notes: notes || undefined,
-        items: items.map(i => ({
-          ...(i.is_manual
-            ? {
-                description: i.product_name,
-                tax_type: i.tax_type,
-                tax_percentage: i.tax_percentage,
-                unit_code: i.unit_code,
-              }
-            : { product_id: i.product_id }),
-          quantity: i.quantity,
-          unit_price: i.unit_price,
-          discount_percentage: i.discount_percentage,
-        })),
-      };
-
-      const res = await api.post(`/companies/${companyId}/invoices`, { ...payload, send_to_sunat: sendToSunat });
-      const invoice = res.data?.data;
-
-      toast.success(sendToSunat ? 'Comprobante creado y enviado a SUNAT' : 'Comprobante creado exitosamente');
+      if (isNotaVenta) {
+        // Nota de Venta: endpoint dedicado, sin SUNAT
+        const payload = {
+          client_id: selectedClient?.id || undefined,
+          payment_method: paymentMethod,
+          notes: notes || undefined,
+          items: items.map(i => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            discount_percentage: i.discount_percentage,
+          })),
+        };
+        await api.post(`/companies/${companyId}/notas-venta`, payload);
+        toast.success('Nota de Venta creada exitosamente');
+      } else {
+        const payload = {
+          document_type: documentType,
+          client_id: selectedClient!.id,
+          currency,
+          exchange_rate: currency === 'USD' ? exchangeRate : 1,
+          issue_date: issueDate,
+          due_date: dueDate || undefined,
+          payment_method: paymentMethod,
+          notes: notes || undefined,
+          items: items.map(i => ({
+            ...(i.is_manual
+              ? {
+                  description: i.product_name,
+                  tax_type: i.tax_type,
+                  tax_percentage: i.tax_percentage,
+                  unit_code: i.unit_code,
+                }
+              : { product_id: i.product_id }),
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            discount_percentage: i.discount_percentage,
+          })),
+        };
+        await api.post(`/companies/${companyId}/invoices`, { ...payload, send_to_sunat: sendToSunat });
+        toast.success(sendToSunat ? 'Comprobante creado y enviado a SUNAT' : 'Comprobante creado exitosamente');
+      }
 
       onCreated();
       onClose();
@@ -340,9 +356,11 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                Nueva {documentType === '01' ? 'Factura' : 'Boleta de Venta'}
+                {documentType === '01' ? 'Nueva Factura' : documentType === '03' ? 'Nueva Boleta de Venta' : 'Nueva Nota de Venta'}
               </h2>
-              <p className="text-xs text-gray-500">Crear comprobante electrónico</p>
+              <p className="text-xs text-gray-500">
+                {isNotaVenta ? 'Documento interno de venta (no se envía a SUNAT)' : 'Crear comprobante electrónico'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-[#161A22] rounded-lg transition">
@@ -357,9 +375,10 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tipo de Documento</label>
               <select
                 value={documentType}
-                onChange={e => setDocumentType(e.target.value as '01' | '03')}
+                onChange={e => setDocumentType(e.target.value as '01' | '03' | '00')}
                 className="w-full rounded-xl border border-gray-200 dark:border-[#2A3244] bg-white dark:bg-[#161A22] text-gray-900 dark:text-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
+                <option value="00">00 - Nota de Venta</option>
                 <option value="01">01 - Factura</option>
                 <option value="03">03 - Boleta de Venta</option>
               </select>
@@ -432,7 +451,9 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
           {/* Client selector */}
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Cliente {documentType === '01' && <span className="text-red-500">(requiere RUC)</span>}
+              Cliente{' '}
+              {documentType === '01' && <span className="text-red-500">(requiere RUC)</span>}
+              {isNotaVenta && <span className="text-gray-400">(opcional)</span>}
             </label>
             {selectedClient ? (
               <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-300 dark:border-emerald-600/50 bg-emerald-50 dark:bg-emerald-500/10">
@@ -735,27 +756,36 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-[#232834]">
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={sendToSunat}
-              onClick={() => setSendToSunat(v => !v)}
-              className={clsx(
-                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                sendToSunat ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-[#232834]'
-              )}
-            >
-              <span className={clsx(
-                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                sendToSunat ? 'translate-x-5' : 'translate-x-0'
-              )} />
-            </button>
-            <span className={clsx(
-              'text-sm font-medium',
-              sendToSunat ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'
-            )}>
-              {sendToSunat ? 'Enviar a SUNAT' : 'Solo registro local'}
-            </span>
+            {!isNotaVenta && (
+              <>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={sendToSunat}
+                  onClick={() => setSendToSunat(v => !v)}
+                  className={clsx(
+                    'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                    sendToSunat ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-[#232834]'
+                  )}
+                >
+                  <span className={clsx(
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    sendToSunat ? 'translate-x-5' : 'translate-x-0'
+                  )} />
+                </button>
+                <span className={clsx(
+                  'text-sm font-medium',
+                  sendToSunat ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'
+                )}>
+                  {sendToSunat ? 'Enviar a SUNAT' : 'Solo registro local'}
+                </span>
+              </>
+            )}
+            {isNotaVenta && (
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                Las Notas de Venta no se envían a SUNAT
+              </span>
+            )}
           </div>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#161A22] rounded-xl transition">
@@ -763,16 +793,20 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated, default
             </button>
             <button
               onClick={handleSubmit}
-              disabled={submitting || items.length === 0 || !selectedClient}
+              disabled={submitting || items.length === 0 || (!isNotaVenta && !selectedClient)}
               className={clsx(
                 'px-6 py-2.5 text-sm font-semibold rounded-xl transition flex items-center gap-2',
-                submitting || items.length === 0 || !selectedClient
+                submitting || items.length === 0 || (!isNotaVenta && !selectedClient)
                   ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25'
+                  : isNotaVenta
+                    ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-500/25'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25'
               )}
             >
               {submitting ? (
-                <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Emitiendo...</>
+                <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Guardando...</>
+              ) : isNotaVenta ? (
+                <><DocumentTextIcon className="w-4 h-4" /> Crear Nota de Venta</>
               ) : (
                 <><DocumentTextIcon className="w-4 h-4" /> Crear Comprobante</>
               )}

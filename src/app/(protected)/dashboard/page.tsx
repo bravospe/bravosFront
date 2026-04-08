@@ -155,19 +155,19 @@ const DashboardPage = () => {
             </div>
             <div className="lg:col-span-4">
               {showCharts && (
-                <div className="rounded-[24px] bg-[#111827] border border-white/[0.04] p-6 h-full flex flex-col shadow-xl relative overflow-hidden">
+                <div className="rounded-[24px] bg-[#111827] border border-white/[0.04] p-4 sm:p-6 min-h-[300px] lg:h-full flex flex-col shadow-xl relative overflow-hidden">
                   {/* Chart header with period tabs */}
-                  <div className="relative z-10 flex items-start justify-between mb-6">
+                  <div className="relative z-10 flex flex-col mb-4 gap-2">
                     <div>
-                      <p className="text-[14px] text-white/50 font-medium leading-none mb-1">Total de</p>
-                      <h3 className="text-[32px] font-black text-white leading-tight tracking-tight">Ventas</h3>
+                      <p className="text-[13px] sm:text-[14px] text-white/50 font-medium leading-none mb-1">Total de</p>
+                      <h3 className="text-[26px] sm:text-[32px] font-black text-white leading-tight tracking-tight">Ventas</h3>
                     </div>
-                    <div className="flex items-center gap-1 bg-black/40 rounded-[14px] p-1 border border-white/5">
+                    <div className="flex items-center gap-1 bg-black/40 rounded-[14px] p-1 border border-white/5 self-start">
                       {PERIODS.map(({ value, label }) => (
                         <button
                           key={value}
                           onClick={() => setSelectedPeriod(value as any)}
-                          className={`px-4 py-1.5 rounded-[10px] text-[12px] font-bold transition-all duration-200 ${
+                          className={`px-3 sm:px-4 py-1.5 rounded-[10px] text-[11px] sm:text-[12px] font-bold transition-all duration-200 ${
                             selectedPeriod === value
                               ? 'bg-[#85fd37] text-black shadow-lg shadow-[#85fd37]/20'
                               : 'text-white/60 hover:text-white'
@@ -179,7 +179,7 @@ const DashboardPage = () => {
                     </div>
                   </div>
                   {/* Chart */}
-                  <div className="flex-1 min-h-0 -mx-2 relative">
+                  <div className="flex-1 min-h-[200px] -mx-2 relative">
                     {revenueChartLoading && (
                       <div className="absolute inset-0 flex items-center justify-center bg-[#111827]/60 rounded-xl z-10">
                         <div className="w-5 h-5 border-2 border-[#85fd37] border-t-transparent rounded-full animate-spin" />

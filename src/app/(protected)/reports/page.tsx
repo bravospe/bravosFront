@@ -13,10 +13,65 @@ import {
   InformationCircleIcon,
   CalendarDaysIcon,
   ArrowRightIcon,
+  BuildingStorefrontIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import { Card, Select, Button } from '@/components/ui';
 import { useReportsStore } from '@/stores/reportsStore';
 import toast from 'react-hot-toast';
+
+// ─── Breakdown card tabs ───────────────────────────────────────────────────────
+const BREAKDOWN_TABS = [
+  { id: 'payment', label: 'Método de Pago' },
+  { id: 'doctype', label: 'Tipo Comprobante' },
+  { id: 'caja',    label: 'Caja' },
+  { id: 'seller',  label: 'Vendedores' },
+] as const;
+
+type BreakdownTab = (typeof BREAKDOWN_TABS)[number]['id'];
+
+const DOC_LABELS: Record<string, string> = {
+  '01': 'Factura', '03': 'Boleta', '07': 'N. Crédito',
+  '08': 'N. Débito', '00': 'N. Venta', 'null': 'Sin comprobante',
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia',
+  yape: 'Yape', plin: 'Plin', yape_plin: 'Yape / Plin',
+  credit: 'Crédito', mixed: 'Mixto', other: 'Otro',
+};
+
+const BAR_COLORS = ['#10B981','#6366F1','#F59E0B','#EF4444','#3B82F6','#EC4899','#8B5CF6'];
+
+function BreakdownBar({ items, formatCurrency }: {
+  items: Array<{ label: string; count: number; amount: number }>;
+  formatCurrency: (v: number) => string;
+}) {
+  const max = Math.max(...items.map(i => i.amount), 1);
+  if (!items.length) return (
+    <div className="flex items-center justify-center h-full py-6">
+      <p className="text-white/40 text-sm">Sin datos para este período</p>
+    </div>
+  );
+  return (
+    <div className="space-y-2.5 overflow-y-auto pr-1" style={{ maxHeight: 160 }}>
+      {items.map((item, idx) => (
+        <div key={idx}>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-medium text-white/80 truncate max-w-[55%]">{item.label}</span>
+            <span className="text-[11px] text-white/60 font-mono">{formatCurrency(item.amount)}</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${(item.amount / max) * 100}%`, background: BAR_COLORS[idx % BAR_COLORS.length] }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const reports = [
   {
@@ -88,6 +143,7 @@ const ReportsPage = () => {
   const [activeReport, setActiveReport] = useState<string | null>(null);
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [exportLoading, setExportLoading] = useState<string | null>(null);
+  const [breakdownTab, setBreakdownTab] = useState<BreakdownTab>('payment');
 
   // Carga inicial
   useEffect(() => {
@@ -256,84 +312,94 @@ const ReportsPage = () => {
 
       {/* KPI Summary */}
       {isLoading && !salesReport ? (
-        <div className="space-y-3">
-          <div className="h-5 w-48 bg-gray-100 dark:bg-[#1E2230] rounded-full animate-pulse" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="rounded-2xl p-5 animate-pulse bg-white dark:bg-[#161A22] border border-gray-100 dark:border-[#232834]">
-                <div className="h-3 bg-zinc-700 rounded w-24 mb-4" />
-                <div className="h-8 bg-zinc-700 rounded w-32" />
-              </div>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="rounded-2xl p-5 animate-pulse bg-white dark:bg-[#161A22] border border-gray-100 dark:border-[#232834] h-32" />
+          ))}
+          <div className="md:col-span-2 rounded-2xl animate-pulse bg-[#111827] h-32" />
         </div>
       ) : salesReport ? (
-        <div className="space-y-3">
-          {/* Fecha activa encima de los KPI */}
-          {dateFrom && dateTo && (
-            <div className="flex items-center gap-2">
-              <CalendarDaysIcon className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                Mostrando datos del{' '}
-                <span className="font-semibold text-gray-700 dark:text-gray-200">
-                  {new Date(dateFrom + 'T12:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}
-                </span>
-                {dateFrom !== dateTo && (
-                  <>
-                    {' '}al{' '}
-                    <span className="font-semibold text-gray-700 dark:text-gray-200">
-                      {new Date(dateTo + 'T12:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </span>
-                  </>
-                )}
-              </span>
-            </div>
-          )}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Total Ventas */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-stretch">
+
+          {/* ── Card 1: Total Ventas ── */}
           <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/20">
             <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
             <div className="absolute -right-2 bottom-2 w-14 h-14 rounded-full bg-white/10" />
             <p className="text-xs font-semibold text-emerald-100 uppercase tracking-wider mb-1">Total Ventas</p>
-            <p className="text-3xl font-bold text-white relative z-10">{salesReport.total_sales}</p>
+            <p className="text-4xl font-bold text-white relative z-10">{salesReport.total_sales}</p>
             <p className="text-xs text-emerald-200 mt-1 relative z-10">transacciones</p>
           </div>
 
-          {/* Monto Total */}
+          {/* ── Card 2: Monto Total ── */}
           <div className="relative overflow-hidden rounded-2xl p-5 bg-white dark:bg-[#161A22] border border-gray-100 dark:border-[#232834] shadow-sm">
             <div className="absolute right-4 top-4 w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
               <span className="text-green-600 dark:text-green-400 font-bold text-sm">S/</span>
             </div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Monto Total</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(salesReport.total_amount)}</p>
-            <div className="mt-2 h-1 rounded-full bg-gray-100 dark:bg-[#232834]">
+            <div className="mt-3 h-1 rounded-full bg-gray-100 dark:bg-[#232834]">
               <div className="h-1 rounded-full bg-green-500" style={{ width: '100%' }} />
             </div>
+            <p className="text-xs text-gray-400 mt-2">IGV: {formatCurrency(salesReport.total_tax)}</p>
           </div>
 
-          {/* IGV Total */}
-          <div className="relative overflow-hidden rounded-2xl p-5 bg-white dark:bg-[#161A22] border border-gray-100 dark:border-[#232834] shadow-sm">
-            <div className="absolute right-4 top-4 w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-              <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">18%</span>
+          {/* ── Card 3: Breakdown con tabs (span 2) ── */}
+          <div className="md:col-span-2 shadow-xl rounded-[20px]">
+            <div className="relative overflow-hidden rounded-[20px] bg-[#111827] border border-white/[0.04] p-5 h-full flex">
+              {/* Decorative blobs */}
+              <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+              <div className="absolute right-0 bottom-0 w-20 h-20 rounded-full bg-indigo-500/10 blur-xl pointer-events-none" />
+
+              {/* ── Columna izquierda: título + tabs verticales (1/3) ── */}
+              <div className="relative z-10 flex flex-col w-1/3 pr-5 border-r border-white/[0.06]">
+                <p className="text-[17px] text-white font-semibold uppercase tracking-wider mb-4">Desglose</p>
+                {/* Tabs verticales */}
+                <div className="flex flex-col gap-1">
+                  {BREAKDOWN_TABS.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setBreakdownTab(tab.id)}
+                      className={clsx(
+                        'w-full text-left px-3 py-2 rounded-[10px] text-[12px] font-bold transition-all duration-200',
+                        breakdownTab === tab.id
+                          ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/30'
+                          : 'text-white/50 hover:bg-white/5 hover:text-white'
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Columna derecha: chart (2/3) ── */}
+              <div className="relative z-10 flex-1 pl-5 flex flex-col justify-center">
+                {breakdownTab === 'payment' && (
+                  <BreakdownBar
+                    formatCurrency={formatCurrency}
+                    items={salesReport.by_payment_method.map(i => ({
+                      ...i, label: PAYMENT_LABELS[i.label] || i.label,
+                    }))}
+                  />
+                )}
+                {breakdownTab === 'doctype' && (
+                  <BreakdownBar
+                    formatCurrency={formatCurrency}
+                    items={salesReport.by_document_type.map(i => ({
+                      ...i, label: DOC_LABELS[i.label] || i.label,
+                    }))}
+                  />
+                )}
+                {breakdownTab === 'caja' && (
+                  <BreakdownBar formatCurrency={formatCurrency} items={salesReport.by_cash_register} />
+                )}
+                {breakdownTab === 'seller' && (
+                  <BreakdownBar formatCurrency={formatCurrency} items={salesReport.by_seller} />
+                )}
+              </div>
             </div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">IGV Total</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(salesReport.total_tax)}</p>
-            <p className="text-xs text-gray-400 mt-2">
-              {salesReport.total_amount > 0
-                ? ((salesReport.total_tax / salesReport.total_amount) * 100).toFixed(1) + '% del monto'
-                : '—'}
-            </p>
           </div>
 
-          {/* Ticket Promedio */}
-          <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-purple-500 to-indigo-600 shadow-lg shadow-purple-500/20">
-            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-            <div className="absolute -right-2 bottom-2 w-14 h-14 rounded-full bg-white/10" />
-            <p className="text-xs font-semibold text-purple-100 uppercase tracking-wider mb-1">Ticket Promedio</p>
-            <p className="text-3xl font-bold text-white relative z-10">{formatCurrency(salesReport.average_ticket)}</p>
-            <p className="text-xs text-purple-200 mt-1 relative z-10">por transacción</p>
-          </div>
-        </div>
         </div>
       ) : null}
 

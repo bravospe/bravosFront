@@ -238,6 +238,7 @@ const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void 
 
 // ── Document type labels ──────────────────────────────────────────────────────
 const DOC_TYPE_LABELS: Record<string, string> = {
+  '00': 'Nota de Venta',
   '01': 'Factura',
   '03': 'Boleta',
   '07': 'Nota Crédito',
@@ -252,6 +253,8 @@ interface DocumentSeries {
   is_active: boolean;
   is_default: boolean;
 }
+
+type RegimenTributario = 'nrus' | 'rer' | 'rmt' | 'rg' | '';
 
 interface SunatConfig {
   ruc: string;
@@ -268,7 +271,41 @@ interface SunatConfig {
   has_certificate: boolean;
   sunat_configured: boolean;
   sunat_provider: string;
+  regimen_tributario: RegimenTributario;
+  allowed_doc_types: string[];
+  empresa_configured: boolean;
 }
+
+const REGIMENES: { value: RegimenTributario; label: string; desc: string; badge: string; docTypes: string }[] = [
+  {
+    value: 'nrus',
+    label: 'NRUS',
+    desc: 'Nuevo Régimen Único Simplificado',
+    badge: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400',
+    docTypes: 'Solo Boleta de Venta',
+  },
+  {
+    value: 'rer',
+    label: 'RER',
+    desc: 'Régimen Especial de Renta',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+    docTypes: 'Factura + Boleta',
+  },
+  {
+    value: 'rmt',
+    label: 'RMT',
+    desc: 'Régimen MYPE Tributario',
+    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400',
+    docTypes: 'Factura + Boleta',
+  },
+  {
+    value: 'rg',
+    label: 'RG',
+    desc: 'Régimen General',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
+    docTypes: 'Factura + Boleta',
+  },
+];
 
 interface CertificateStatus {
   has_certificate: boolean;
@@ -286,6 +323,7 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
     logo: '', ubigeo: '', apisunat_mode: 'test',
     sunat_user: '', has_sol: false, has_certificate: false,
     sunat_configured: false, sunat_provider: '',
+    regimen_tributario: '', allowed_doc_types: [], empresa_configured: false,
   });
   const [savingInfo, setSavingInfo] = useState(false);
   const [savingSunat, setSavingSunat] = useState(false);
@@ -312,6 +350,14 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
   const [solUser, setSolUser] = useState('');
   const [solPassword, setSolPassword] = useState('');
 
+  // GRE credentials (nueva plataforma guías de remisión)
+  const [greClientId, setGreClientId] = useState('');
+  const [greClientSecret, setGreClientSecret] = useState('');
+  const [savingGre, setSavingGre] = useState(false);
+  const [testingGre, setTestingGre] = useState(false);
+  const [hasGre, setHasGre] = useState(false);
+  const [greTestResult, setGreTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+
   // Document series
   const [series, setSeries] = useState<DocumentSeries[]>([]);
   const [loadingSeries, setLoadingSeries] = useState(false);
@@ -336,6 +382,10 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
       if (d.sunat_user) {
         setSolUser(d.sunat_user);
       }
+      if (d.gre_client_id) {
+        setGreClientId(d.gre_client_id);
+      }
+      setHasGre(!!d.has_gre);
     } catch {
       // ignore
     }
@@ -426,6 +476,11 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
     setShowConfirmModal(false);
     setSavingInfo(true);
     try {
+      if (!config.regimen_tributario) {
+        toast.error('Selecciona el régimen tributario de tu empresa');
+        setSavingInfo(false);
+        return;
+      }
       await api.put(`/companies/${companyId}/sunat/config`, {
         name: config.name,
         ruc: config.ruc,
@@ -434,6 +489,7 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
         phone: config.phone,
         email: config.email,
         ubigeo: config.ubigeo,
+        regimen_tributario: config.regimen_tributario,
       });
       savedRucRef.current = config.ruc;
       toast.success('Informacion actualizada');
@@ -534,6 +590,55 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
     }
   };
 
+  // Save GRE API credentials
+  const handleSaveGre = async () => {
+    if (!greClientId.trim()) {
+      toast.error('Ingresa el Client ID de GRE');
+      return;
+    }
+    if (!greClientSecret.trim()) {
+      toast.error('Ingresa el Client Secret de GRE');
+      return;
+    }
+    setSavingGre(true);
+    try {
+      await api.put(`/companies/${companyId}/sunat/config`, {
+        gre_client_id: greClientId,
+        gre_client_secret: greClientSecret,
+      });
+      toast.success('Credenciales GRE guardadas');
+      setGreClientSecret('');
+      setHasGre(true);
+      await fetchConfig();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Error al guardar credenciales GRE');
+    } finally {
+      setSavingGre(false);
+    }
+  };
+
+  // Test GRE connection
+  const handleTestGre = async () => {
+    if (!greClientId.trim() || !greClientSecret.trim()) {
+      toast.error('Ingresa Client ID y Client Secret antes de probar');
+      return;
+    }
+    setTestingGre(true);
+    setGreTestResult(null);
+    try {
+      const res = await api.post(`/companies/${companyId}/sunat/test-gre-connection`, {
+        gre_client_id: greClientId,
+        gre_client_secret: greClientSecret,
+      });
+      setGreTestResult({ success: res.data.success, message: res.data.message });
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.response?.data?.message || 'Error de conexión';
+      setGreTestResult({ success: false, error: msg });
+    } finally {
+      setTestingGre(false);
+    }
+  };
+
   // Test SUNAT connection
   const handleTestConnection = async () => {
     setTesting(true);
@@ -601,6 +706,10 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
     {
       label: 'Datos de empresa configurados',
       done: !!(config.name && config.ruc && config.address),
+    },
+    {
+      label: 'Régimen tributario configurado',
+      done: !!config.regimen_tributario,
     },
     {
       label: 'Certificado digital subido',
@@ -736,6 +845,54 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
             El RUC no ha sido validado con SUNAT. Verifica el numero ingresado.
           </p>
         )}
+
+        {/* ── Régimen Tributario ── */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center gap-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Régimen Tributario
+            </label>
+            <span className="text-xs text-red-500 font-medium">* Obligatorio</span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
+            Define qué tipos de comprobantes puedes emitir. Sin esto, solo podrás generar Notas de Venta internas.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {REGIMENES.map(reg => (
+              <button
+                key={reg.value}
+                type="button"
+                onClick={() => setConfig({ ...config, regimen_tributario: reg.value })}
+                className={clsx(
+                  'relative flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-all',
+                  config.regimen_tributario === reg.value
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'
+                    : 'border-gray-200 dark:border-[#232834] hover:border-gray-300 dark:hover:border-[#2A3244]'
+                )}
+              >
+                {config.regimen_tributario === reg.value && (
+                  <CheckCircleIcon className="absolute top-2 right-2 w-4 h-4 text-emerald-500" />
+                )}
+                <span className={clsx('text-xs font-bold px-1.5 py-0.5 rounded-md', reg.badge)}>
+                  {reg.label}
+                </span>
+                <p className="text-[11px] font-medium text-gray-700 dark:text-gray-200 leading-tight mt-0.5">
+                  {reg.desc}
+                </p>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
+                  {reg.docTypes}
+                </p>
+              </button>
+            ))}
+          </div>
+          {!config.regimen_tributario && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <ExclamationTriangleIcon className="w-3.5 h-3.5 flex-shrink-0" />
+              Sin régimen configurado solo puedes emitir Notas de Venta (POS interno).
+            </p>
+          )}
+        </div>
+
         <div className="flex justify-end">
           <Button
             onClick={() => setShowConfirmModal(true)}
@@ -777,6 +934,7 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
                 { label: 'Direccion', value: config.address || '—' },
                 { label: 'Telefono', value: config.phone || '—' },
                 { label: 'Email', value: config.email || '—' },
+                { label: 'Régimen', value: REGIMENES.find(r => r.value === config.regimen_tributario)?.label || '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-3 px-4 py-2.5">
                   <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">{label}</span>
@@ -975,7 +1133,85 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
         </div>
       </div>
 
-      {/* ── Seccion 4: Entorno SUNAT ── */}
+      {/* ── Seccion 4: Credenciales GRE (nueva plataforma guías) ── */}
+      <div className="bg-white dark:bg-[#161A22] rounded-2xl border border-gray-100 dark:border-[#232834] p-6 space-y-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-semibold text-gray-900 dark:text-white">Guías de Remisión — Nueva Plataforma GRE</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Credenciales OAuth2 para enviar guías de remisión al nuevo sistema REST de SUNAT.
+              Generadas en SUNAT SOL → Empresas → Comprobantes Electrónicos → Nueva Plataforma.
+            </p>
+          </div>
+          {hasGre && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 flex-shrink-0">
+              <CheckCircleIcon className="w-3.5 h-3.5" />
+              Configurado
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Client ID
+            </label>
+            <input
+              value={greClientId}
+              onChange={e => setGreClientId(e.target.value)}
+              placeholder="client_id de SUNAT"
+              className="w-full rounded-xl border border-gray-200 dark:border-[#2A3244] bg-white dark:bg-[#161A22] text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Client Secret
+            </label>
+            <input
+              type="password"
+              value={greClientSecret}
+              onChange={e => setGreClientSecret(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-xl border border-gray-200 dark:border-[#2A3244] bg-white dark:bg-[#161A22] text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
+        {greTestResult && (
+          <div className={clsx(
+            'flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm',
+            greTestResult.success
+              ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
+          )}>
+            {greTestResult.success
+              ? <CheckCircleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              : <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            }
+            <span>{greTestResult.success ? greTestResult.message : greTestResult.error}</span>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleTestGre}
+            loading={testingGre}
+            disabled={!greClientId.trim() || !greClientSecret.trim()}
+          >
+            Probar conexión
+          </Button>
+          <Button
+            onClick={handleSaveGre}
+            loading={savingGre}
+            disabled={!greClientId.trim() || !greClientSecret.trim()}
+          >
+            Guardar credenciales GRE
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Seccion 5: Entorno SUNAT ── */}
       <div className="bg-white dark:bg-[#161A22] rounded-2xl border border-gray-100 dark:border-[#232834] p-6 space-y-5">
         <h2 className="font-semibold text-gray-900 dark:text-white">Entorno SUNAT</h2>
 
@@ -1011,48 +1247,53 @@ const EmpresaTab = ({ companyId }: { companyId: string }) => {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={handleTestConnection} loading={testing}>
+            Probar Conexion
+          </Button>
           <Button onClick={handleSaveSunat} loading={savingSunat}>
             Guardar ambiente
           </Button>
         </div>
       </div>
 
-      {/* ── Seccion 5: Probar Conexion ── */}
-      <div className="bg-white dark:bg-[#161A22] rounded-2xl border border-gray-100 dark:border-[#232834] p-6 space-y-5">
-        <div>
-          <h2 className="font-semibold text-gray-900 dark:text-white">Probar Conexion</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Verifica que tu configuracion con SUNAT es correcta enviando un comprobante de prueba.
-          </p>
-        </div>
-
-        {/* Test connection result */}
-        {testResult && (
-          <div className={clsx(
-            'rounded-xl px-4 py-3 text-sm flex items-start gap-2',
-            testResult.success
-              ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-              : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
-          )}>
-            {testResult.success
-              ? <CheckCircleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              : <XMarkIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            }
-            <span>{testResult.success ? testResult.message : testResult.error}</span>
+      {/* ── Modal: Resultado de prueba de conexion ── */}
+      {testResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setTestResult(null)} />
+          <div className="relative bg-white dark:bg-[#161A22] rounded-2xl border border-gray-200 dark:border-[#232834] shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className={clsx(
+                'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
+                testResult.success
+                  ? 'bg-emerald-100 dark:bg-emerald-500/20'
+                  : 'bg-red-100 dark:bg-red-500/20'
+              )}>
+                {testResult.success
+                  ? <CheckCircleIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  : <XMarkIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900 dark:text-white text-base">
+                  {testResult.success ? 'Conexion exitosa' : 'Error de conexion'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 break-words">
+                  {testResult.success ? testResult.message : testResult.error}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setTestResult(null)}
+                className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 dark:bg-[#232834] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-[#2A3244] transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
-        )}
-
-        <div className="flex justify-end">
-          <Button
-            variant="secondary"
-            onClick={handleTestConnection}
-            loading={testing}
-          >
-            Probar Conexion
-          </Button>
         </div>
-      </div>
+      )}
 
       {/* ── Seccion 6: Series de Documentos ── */}
       <div className="bg-white dark:bg-[#161A22] rounded-2xl border border-gray-100 dark:border-[#232834] p-6 space-y-4">

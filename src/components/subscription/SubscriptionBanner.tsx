@@ -1,6 +1,6 @@
 'use client'
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { ClockIcon, ExclamationTriangleIcon, XMarkIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useSubscriptionStore } from '@/stores/subscriptionStore'
 import { useQuery } from '@tanstack/react-query'
@@ -8,6 +8,7 @@ import { subscriptionService } from '@/services/subscriptionService'
 
 export default function SubscriptionBanner() {
   const router = useRouter()
+  const pathname = usePathname()
   const { subscription, fetchSubscription, isOnTrial, isExpiringSoon, daysRemaining, isExpired, initialized } = useSubscriptionStore()
 
   const { data: latestPayment, isLoading: isLoadingPayment } = useQuery({
@@ -21,8 +22,9 @@ export default function SubscriptionBanner() {
 
   if (!initialized || !subscription) return null
 
-  // Si hay un pago pendiente, mostrar banner de "En revisión"
+  // Si hay un pago pendiente, mostrar banner de "En revisión" solo en /settings/subscription
   if (latestPayment?.data?.status === 'pending') {
+    if (pathname !== '/settings/subscription') return null
     return (
       <div className="mx-4 mt-3 rounded-xl border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3">
         <div className="flex items-center justify-between gap-4">
@@ -33,16 +35,13 @@ export default function SubscriptionBanner() {
                 Tu pago de membresía está siendo verificado
               </p>
               <p className="text-xs text-emerald-600/80 dark:text-emerald-400/60 mt-0.5">
-                Referencia: {latestPayment.data.transaction_reference} • Esto puede tardar hasta 24 horas.
+                {latestPayment.data.transaction_reference
+                  ? `Ref: ${latestPayment.data.transaction_reference} • `
+                  : ''}
+                Esto puede tardar hasta 24 horas.
               </p>
             </div>
           </div>
-          <button
-            onClick={() => router.push('/settings/subscription')}
-            className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
-          >
-            Ver detalle
-          </button>
         </div>
       </div>
     );

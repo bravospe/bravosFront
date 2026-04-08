@@ -1,9 +1,6 @@
 import { create } from 'zustand'
-import axios from 'axios'
+import api from '@/lib/api'
 import { useAuthStore } from './authStore'
-
-import { getApiUrl } from '@/utils/apiConfig';
-const API_URL = getApiUrl();
 
 export interface KardexEntry {
     id: string
@@ -71,19 +68,26 @@ interface InventoryState {
         reason: string
         quantity: number
         notes?: string
+        warehouse_id?: string
     }) => Promise<void>
     clearError: () => void
 }
 
-const getCompanyId = () => {
-    const { user } = useAuthStore.getState()
-    return user?.current_company_id || user?.companies?.[0]?.id
-}
-
-const getAuthHeaders = () => {
-    const { token } = useAuthStore.getState()
-    return { Authorization: `Bearer ${token}` }
-}
+const ensureCompany = () => {
+    const authStore = useAuthStore.getState();
+    if (!authStore.currentCompany && authStore.user) {
+        const user = authStore.user;
+        const companyFromUser = (user as any).currentCompany || 
+                                (user as any).current_company || 
+                                (user as any).companies?.[0];
+        
+        if (companyFromUser) {
+            authStore.setCurrentCompany(companyFromUser);
+            return companyFromUser.id;
+        }
+    }
+    return authStore.currentCompany?.id || authStore.user?.current_company_id || authStore.user?.companies?.[0]?.id;
+};
 
 export const useInventoryStore = create<InventoryState>((set, _get) => ({
     kardex: [],
@@ -94,16 +98,13 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
     error: null,
 
     fetchStats: async () => {
-        const companyId = getCompanyId()
+        const companyId = ensureCompany()
         if (!companyId) return
 
         set({ isLoading: true, error: null })
 
         try {
-            const response = await axios.get(`${API_URL}/companies/${companyId}/inventory/stats`, {
-                headers: getAuthHeaders()
-            })
-
+            const response = await api.get(`/companies/${companyId}/inventory/stats`)
             set({ stats: response.data, isLoading: false })
         } catch (error: any) {
             set({
@@ -114,14 +115,13 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
     },
 
     fetchKardex: async (productId, params) => {
-        const companyId = getCompanyId()
+        const companyId = ensureCompany()
         if (!companyId) return
 
         set({ isLoading: true, error: null })
 
         try {
-            const response = await axios.get(`${API_URL}/companies/${companyId}/inventory/kardex`, {
-                headers: getAuthHeaders(),
+            const response = await api.get(`/companies/${companyId}/inventory/kardex`, {
                 params: {
                     product_id: productId,
                     ...params
@@ -138,16 +138,13 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
     },
 
     fetchAlerts: async () => {
-        const companyId = getCompanyId()
+        const companyId = ensureCompany()
         if (!companyId) return
 
         set({ isLoading: true, error: null })
 
         try {
-            const response = await axios.get(`${API_URL}/companies/${companyId}/inventory/alerts`, {
-                headers: getAuthHeaders()
-            })
-
+            const response = await api.get(`/companies/${companyId}/inventory/alerts`)
             set({ alerts: response.data.data || [], isLoading: false })
         } catch (error: any) {
             set({
@@ -158,14 +155,13 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
     },
 
     fetchAdjustments: async (params) => {
-        const companyId = getCompanyId()
+        const companyId = ensureCompany()
         if (!companyId) return
 
         set({ isLoading: true, error: null })
 
         try {
-            const response = await axios.get(`${API_URL}/companies/${companyId}/inventory/adjustments`, {
-                headers: getAuthHeaders(),
+            const response = await api.get(`/companies/${companyId}/inventory/adjustments`, {
                 params
             })
 
@@ -179,16 +175,13 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
     },
 
     createAdjustment: async (data) => {
-        const companyId = getCompanyId()
+        const companyId = ensureCompany()
         if (!companyId) throw new Error('No company selected')
 
         set({ isLoading: true, error: null })
 
         try {
-            await axios.post(`${API_URL}/companies/${companyId}/inventory/adjustments`, data, {
-                headers: getAuthHeaders()
-            })
-
+            await api.post(`/companies/${companyId}/inventory/adjustments`, data)
             set({ isLoading: false })
         } catch (error: any) {
             set({

@@ -17,6 +17,8 @@ import {
   ChatBubbleLeftRightIcon,
   ArrowsRightLeftIcon,
   EllipsisHorizontalCircleIcon,
+  ChevronLeftIcon,
+  CameraIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { Button, Input, Modal, Badge } from '@/components/ui';
@@ -30,10 +32,18 @@ import type { Product, Client } from '@/types';
 import { YapeIcon, PlinIcon } from '@/components/ui/WalletIcons';
 import { printReceiptFromSale } from '@/lib/printReceiptFromSale';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 
 // Importar modales reales del POS
 import AperturaCajaModal from '@/components/pos/AperturaCajaModal';
+import GestionCajaModal from '@/components/pos/GestionCajaModal';
 import { ClientSelectModal } from '@/components/pos/ClientSelectModal';
+
+// El scanner usa getUserMedia y @zxing/library — solo cliente, nunca SSR
+const BarcodeScannerModal = dynamic(
+  () => import('@/components/pos/BarcodeScannerModal'),
+  { ssr: false }
+);
 
 const POSPage = () => {
   const {
@@ -96,6 +106,9 @@ const POSPage = () => {
   const [clientSearch, setClientSearch] = useState('');
   const [selectedClientIndex, setSelectedClientIndex] = useState(-1);
   const [localCashReceived, setLocalCashReceived] = useState('');
+  const [showGestionCaja, setShowGestionCaja] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const filteredClients = useMemo(() => {
     return clients.filter(c => 
@@ -145,6 +158,50 @@ const POSPage = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handleBarcodeDetected = async (code: string) => {
+    // 1. Intentar buscar en productos locales (ya cargados)
+    const match = products.find(
+      (p: any) => p.barcode === code || p.sku === code || p.code === code
+    );
+
+    if (match) {
+      handleAddProduct(match as any);
+      return;
+    }
+
+    // 2. Si no está local, buscar en el servidor usando la acción existente
+    toast.loading(`Buscando producto: ${code}...`, { id: 'barcode-search' });
+    
+    try {
+      // searchProducts actualiza searchResults en el store
+      const results = await searchProducts(code);
+      
+      // Intentar encontrar coincidencia exacta en los nuevos resultados
+      const remoteMatch = results.find(
+        (p: any) => p.barcode === code || p.sku === code || p.code === code
+      );
+
+      if (remoteMatch) {
+        handleAddProduct(remoteMatch as any);
+        toast.success(`${remoteMatch.name} encontrado`, { id: 'barcode-search' });
+      } else if (results.length === 1) {
+        // Si solo hay uno y no es exacto, pero es el único resultado, lo agregamos
+        handleAddProduct(results[0] as any);
+        toast.success(`${results[0].name} encontrado`, { id: 'barcode-search' });
+      } else if (results.length > 1) {
+        // Varios resultados → mostrar en el buscador manual
+        setSearch(code);
+        toast.dismiss('barcode-search');
+        toast(`Múltiples coincidencias para "${code}"`, { icon: '🔍' });
+      } else {
+        toast.error(`Producto con código "${code}" no encontrado`, { id: 'barcode-search' });
+      }
+    } catch (error) {
+      console.error('Error searching barcode:', error);
+      toast.error('Error al buscar el código de barras', { id: 'barcode-search' });
+    }
+  };
 
   const displayProducts = useMemo(() => {
     const base = search.trim() ? searchResults : products;
@@ -231,21 +288,34 @@ const POSPage = () => {
       {/* ─── MODAL APERTURA CAJA (SI NO HAY SESION) ─── */}
       <AperturaCajaModal open={!currentSession && !isSessionLoading} />
 
+      {/* ─── MODAL GESTION CAJA (CERRAR / CAMBIAR) ─── */}
+      <GestionCajaModal open={showGestionCaja} onClose={() => setShowGestionCaja(false)} />
+
       {/* ─── AREA DE PRODUCTOS ─── */}
-      <div className="flex-1 flex flex-col p-4 md:p-6 min-w-0">
+      <div className="flex-1 flex flex-col px-4 pt-4 pb-[90px] md:px-6 md:pt-6 md:pb-6 min-w-0">
         <div className="flex flex-col md:flex-row gap-3 mb-5 items-start md:items-center">
-          <div className="relative flex-1 w-full">
-            <MagnifyingGlassIcon className={clsx("absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors", searchFocused ? "text-emerald-500" : "text-gray-400")} />
-            <input
-              ref={searchRef}
-              type="text"
-              placeholder="Buscar productos (F2)"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/5 shadow-sm focus:ring-2 focus:ring-emerald-500 text-sm dark:text-white outline-none"
-            />
+          <div className="relative flex-1 w-full flex gap-2">
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className={clsx("absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors", searchFocused ? "text-emerald-500" : "text-gray-400")} />
+              <input
+                ref={searchRef}
+                type="text"
+                placeholder="Buscar productos (F2)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/5 shadow-sm focus:ring-2 focus:ring-emerald-500 text-sm dark:text-white outline-none"
+              />
+            </div>
+            {/* Botón escáner — solo móvil */}
+            <button
+              onClick={() => setShowScanner(true)}
+              className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/5 shadow-sm text-gray-500 dark:text-gray-400 active:bg-gray-100 dark:active:bg-white/10 transition-colors flex-shrink-0"
+              title="Escanear código de barras"
+            >
+              <CameraIcon className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
@@ -290,8 +360,31 @@ const POSPage = () => {
         </div>
       </div>
 
-      {/* ─── PANEL CARRITO (DERECHA) ─── */}
-      <div className="w-[340px] xl:w-[380px] flex flex-col gap-4 p-4 z-10 flex-shrink-0 h-full overflow-hidden">
+      {/* ─── PANEL CARRITO (DERECHA en desktop / Overlay en mobile) ─── */}
+      <div className={clsx(
+        "flex-col gap-4 p-4 flex-shrink-0 overflow-hidden",
+        // Mobile: hidden por defecto, overlay cuando showMobileCart
+        showMobileCart
+          ? "flex fixed inset-0 z-[48] bg-[#F1F3F6] dark:bg-[#0D1117]"
+          : "hidden",
+        // Desktop: siempre visible como sidebar
+        "md:static md:inset-auto md:flex md:w-[340px] xl:w-[380px] md:h-full md:z-10 md:bg-transparent"
+      )}>
+        {/* ── Header mobile (solo visible en overlay mobile) ── */}
+        <div className="flex items-center gap-3 mb-1 pb-3 border-b border-gray-200 dark:border-white/10 md:hidden">
+          <button
+            onClick={() => setShowMobileCart(false)}
+            className="w-9 h-9 rounded-xl bg-white dark:bg-[#111827] border border-gray-100 dark:border-white/10 flex items-center justify-center flex-shrink-0"
+          >
+            <ChevronLeftIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+          </button>
+          <h2 className="flex-1 text-base font-bold text-gray-900 dark:text-white">Carrito</h2>
+          {items.length > 0 && (
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-background px-2 py-1 rounded-lg">
+              {items.length} {items.length === 1 ? 'producto' : 'productos'}
+            </span>
+          )}
+        </div>
         
         {/* CAJA 1: CARRITO (HEADER + ITEMS) */}
         <div className="flex-1 flex flex-col bg-white dark:bg-[#111827]/80 backdrop-blur-md border border-white/5 shadow-xl rounded-[var(--radius-xl)] overflow-hidden min-h-0">
@@ -315,19 +408,30 @@ const POSPage = () => {
               </div>
 
               {/* Status Caja */}
-              <div className="flex items-center justify-between px-3 py-2 mb-4 bg-gray-50 dark:bg-background rounded-xl border border-gray-100 dark:border-white/5">
-              <div className="flex items-center gap-2">
-                <div className={clsx("w-2 h-2 rounded-full animate-pulse", currentSession ? "bg-emerald-500" : "bg-red-500")} />
-                <p className="text-[10px] font-bold dark:text-white truncate uppercase tracking-wider">
-                  {currentSession ? currentSession.cash_register?.name : "Caja Cerrada"}
-                </p>
-              </div>
-              {currentSession && (
-                <span className="text-[9px] font-bold text-gray-400">
-                  {new Date(currentSession.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
-              </div>
+              <button
+                onClick={() => currentSession && setShowGestionCaja(true)}
+                className={clsx(
+                  "w-full flex items-center justify-between px-3 py-2 mb-4 rounded-xl border transition-all",
+                  currentSession
+                    ? "bg-gray-50 dark:bg-background border-gray-100 dark:border-white/5 hover:border-emerald-500/50 cursor-pointer"
+                    : "bg-gray-50 dark:bg-background border-gray-100 dark:border-white/5 cursor-default"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={clsx("w-2 h-2 rounded-full animate-pulse", currentSession ? "bg-emerald-500" : "bg-red-500")} />
+                  <p className="text-[10px] font-bold dark:text-white truncate uppercase tracking-wider">
+                    {currentSession ? currentSession.cash_register?.name : "Caja Cerrada"}
+                  </p>
+                </div>
+                {currentSession && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-bold text-gray-400">
+                      {new Date(currentSession.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-[9px] text-gray-300 dark:text-white/20">···</span>
+                  </div>
+                )}
+              </button>
 
               <button 
               onClick={() => setShowClientModal(true)}            
@@ -430,15 +534,60 @@ const POSPage = () => {
             </div>
           </div>
 
-          <Button 
-            fullWidth 
+          <Button
+            fullWidth
             size="lg"
             disabled={items.length === 0}
-            onClick={() => setShowPaymentModal(true)}
+            onClick={() => { setShowMobileCart(false); setShowPaymentModal(true); }}
             className="h-12 text-sm font-black bg-black hover:bg-black/80 text-white border-none shadow-2xl rounded-xl transition-all active:scale-[0.98]"
           >
-            COBRAR (F12)
+            COBRAR <span className="hidden md:inline">(F12)</span>
           </Button>
+        </div>
+      </div>
+
+      {/* ─── BARRA FIJA INFERIOR (solo mobile) ─── */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-[#111827] border-t border-gray-100 dark:border-white/10 shadow-2xl">
+        <div className="flex items-center gap-3 px-4 py-3">
+
+          {/* Izquierda: icono carrito + conteo + total */}
+          <button
+            onClick={() => setShowMobileCart(true)}
+            className="flex-1 flex items-center gap-3 min-w-0 active:opacity-70 transition-opacity"
+          >
+            <div className="relative flex-shrink-0">
+              <div className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-background flex items-center justify-center">
+                <ShoppingCartIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              </div>
+              {items.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-emerald-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                  {items.length}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide leading-none mb-0.5">
+                {items.length === 0 ? 'Carrito vacío' : `${items.length} producto${items.length !== 1 ? 's' : ''} · ver carrito`}
+              </p>
+              <p className="text-xl font-black text-gray-900 dark:text-white leading-none tabular-nums">
+                S/ {total.toFixed(2)}
+              </p>
+            </div>
+          </button>
+
+          {/* Derecha: botón COBRAR */}
+          <button
+            disabled={items.length === 0}
+            onClick={() => setShowPaymentModal(true)}
+            className={clsx(
+              "flex-shrink-0 px-7 py-3.5 rounded-2xl font-black text-sm transition-all active:scale-[0.97]",
+              items.length > 0
+                ? "bg-black dark:bg-[#85fd37] text-white dark:text-black shadow-lg"
+                : "bg-gray-200 dark:bg-background text-gray-400 cursor-not-allowed"
+            )}
+          >
+            COBRAR
+          </button>
         </div>
       </div>
 
@@ -626,6 +775,13 @@ const POSPage = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Escáner de código de barras — solo móvil */}
+      <BarcodeScannerModal
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onDetected={handleBarcodeDetected}
+      />
     </div>
   );
 };

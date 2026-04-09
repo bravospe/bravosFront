@@ -135,26 +135,38 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
                         params: { product_id: productId, per_page: 100 }
                     })
                     
-                    const movements = (adjRes.data.data || []).map((a: any) => ({
-                        id: a.id,
-                        product_id: a.product_id,
-                        movement_type: a.adjustment_type === 'increase' ? 'entry' : 'exit',
-                        reason: a.reason === 'initial' ? 'Saldo Inicial' : (a.notes || a.reason),
-                        quantity: a.quantity,
-                        unit_cost: 0,
-                        total_cost: 0,
-                        balance_quantity: 0, // Se calculará en el componente o aquí
-                        balance_value: 0,
-                        created_at: a.created_at
-                    })).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                    const reasonLabels: Record<string, string> = {
+                        damaged: 'Dañado',
+                        lost: 'Perdido',
+                        found: 'Encontrado',
+                        correction: 'Corrección',
+                        initial: 'Saldo Inicial',
+                        other: 'Otro',
+                    };
 
-                    // Calcular saldo acumulado
+                    const movements = (adjRes.data.data || [])
+                        .filter((a: any) => String(a.product_id) === String(productId))
+                        .map((a: any) => ({
+                            id: a.id,
+                            product_id: a.product_id,
+                            movement_type: a.adjustment_type === 'increase' ? 'entry' : 'exit',
+                            reason: a.reason === 'initial' ? 'Saldo Inicial' : (a.notes || reasonLabels[a.reason] || a.reason),
+                            quantity: parseFloat(a.quantity) || 0,
+                            unit_cost: 0,
+                            total_cost: 0,
+                            balance_quantity: 0,
+                            balance_value: 0,
+                            created_at: a.created_at
+                        })).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+                    // Calcular saldo acumulado numéricamente
                     let currentBalance = 0;
                     const kardexWithBalance = movements.map((m: any) => {
-                        if (m.movement_type === 'entry') currentBalance += m.quantity;
-                        else currentBalance -= m.quantity;
+                        currentBalance = m.movement_type === 'entry' 
+                            ? currentBalance + m.quantity 
+                            : currentBalance - m.quantity;
                         return { ...m, balance_quantity: currentBalance };
-                    }).reverse(); // Revertir para mostrar lo más nuevo arriba
+                    }).reverse();
 
                     set({ kardex: kardexWithBalance, isLoading: false })
                     return;

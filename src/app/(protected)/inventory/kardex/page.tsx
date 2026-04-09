@@ -15,7 +15,7 @@ import { useInventoryStore } from '@/stores/inventoryStore';
 import { useProductStore } from '@/stores/productStore';
 
 const KardexPage = () => {
-    const { kardex, isLoading, fetchKardex, fetchStats, stats } = useInventoryStore();
+    const { kardex, isLoading, fetchKardex, fetchStats, stats, fetchAdjustments, adjustments } = useInventoryStore();
     const { products, fetchProducts } = useProductStore();
     const [selectedProduct, setSelectedProduct] = useState<string>('');
     const [dateFrom, setDateFrom] = useState('');

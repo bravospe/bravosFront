@@ -128,11 +128,15 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
                 }
             })
 
-            set({ kardex: response.data.data || [], isLoading: false })
+            // Soporta tanto response.data como response.data.data
+            const kardexData = Array.isArray(response.data) ? response.data : (response.data.data || [])
+            set({ kardex: kardexData, isLoading: false })
         } catch (error: any) {
+            console.error('Error fetching kardex:', error)
             set({
                 error: error.response?.data?.message || 'Error al cargar kardex',
-                isLoading: false
+                isLoading: false,
+                kardex: []
             })
         }
     },

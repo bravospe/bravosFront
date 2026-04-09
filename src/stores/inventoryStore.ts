@@ -121,18 +121,48 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
         set({ isLoading: true, error: null })
 
         try {
+            // Intentar obtener del Kardex oficial
             const response = await api.get(`/companies/${companyId}/inventory/kardex`, {
-                params: {
-                    product_id: productId,
-                    ...params
-                }
+                params: { product_id: productId, ...params }
             })
-
-            // Soporta tanto response.data como response.data.data
             const kardexData = Array.isArray(response.data) ? response.data : (response.data.data || [])
             set({ kardex: kardexData, isLoading: false })
         } catch (error: any) {
-            console.error('Error fetching kardex:', error)
+            // Si el endpoint no existe (501), fallback a los ajustes del producto
+            if (error.response?.status === 501 || error.response?.status === 404) {
+                try {
+                    const adjRes = await api.get(`/companies/${companyId}/inventory/adjustments`, {
+                        params: { product_id: productId, per_page: 100 }
+                    })
+                    
+                    const movements = (adjRes.data.data || []).map((a: any) => ({
+                        id: a.id,
+                        product_id: a.product_id,
+                        movement_type: a.adjustment_type === 'increase' ? 'entry' : 'exit',
+                        reason: a.reason === 'initial' ? 'Saldo Inicial' : (a.notes || a.reason),
+                        quantity: a.quantity,
+                        unit_cost: 0,
+                        total_cost: 0,
+                        balance_quantity: 0, // Se calculará en el componente o aquí
+                        balance_value: 0,
+                        created_at: a.created_at
+                    })).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+                    // Calcular saldo acumulado
+                    let currentBalance = 0;
+                    const kardexWithBalance = movements.map((m: any) => {
+                        if (m.movement_type === 'entry') currentBalance += m.quantity;
+                        else currentBalance -= m.quantity;
+                        return { ...m, balance_quantity: currentBalance };
+                    }).reverse(); // Revertir para mostrar lo más nuevo arriba
+
+                    set({ kardex: kardexWithBalance, isLoading: false })
+                    return;
+                } catch (e) {
+                    console.error('Error in virtual kardex:', e)
+                }
+            }
+            
             set({
                 error: error.response?.data?.message || 'Error al cargar kardex',
                 isLoading: false,

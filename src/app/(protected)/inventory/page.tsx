@@ -171,47 +171,63 @@ export default function InventoryOverviewPage() {
                     keyExtractor={(p) => p.id}
                     columns={[
                         {
+                            key: 'image',
+                            header: '',
+                            width: '60px',
+                            render: (p) => (
+                                <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-[#1E2230] border border-gray-200 dark:border-[#232834] overflow-hidden">
+                                    {p.image ? (
+                                        <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                            <ArchiveBoxIcon className="w-5 h-5" />
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        },
+                        {
                             key: 'product',
                             header: 'Producto',
                             render: (p) => (
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
-                                        {p.image ? (
-                                            <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <ArchiveBoxIcon className="w-5 h-5 text-gray-400" />
+                                <div className="max-w-xs md:max-w-sm">
+                                    <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{p.name}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-gray-500">{p.code}</span>
+                                        {p.category && (
+                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                                {p.category.name}
+                                            </span>
                                         )}
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-sm text-gray-900 dark:text-white">{p.name}</p>
-                                        <p className="text-xs text-gray-500 font-mono">{p.code}</p>
                                     </div>
                                 </div>
                             )
                         },
                         {
                             key: 'stock_level',
-                            header: 'Nivel de Stock',
-                            width: '250px',
+                            header: 'Salud de Stock',
+                            width: '200px',
                             render: (p) => {
                                 const min = p.min_stock || 1;
                                 const percentage = Math.min((p.stock / (min * 2)) * 100, 100);
-                                const isLow = p.stock <= min;
+                                const isLow = p.stock > 0 && p.stock <= min;
                                 const isOut = p.stock <= 0;
                                 
                                 return (
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between text-[10px] uppercase font-bold tracking-wider">
-                                            <span className={isOut ? 'text-red-500' : isLow ? 'text-amber-500' : 'text-emerald-500'}>
+                                    <div className="space-y-1.5">
+                                        <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider">
+                                            <span className={clsx(
+                                                isOut ? 'text-red-500' : isLow ? 'text-amber-500' : 'text-emerald-500'
+                                            )}>
                                                 {isOut ? 'Agotado' : isLow ? 'Bajo' : 'Óptimo'}
                                             </span>
-                                            <span className="text-gray-400">{p.stock} / {min} min.</span>
+                                            <span className="text-gray-400 tabular-nums">{p.stock} / {min} min</span>
                                         </div>
-                                        <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                                        <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                                             <div 
                                                 className={clsx(
-                                                    'h-full transition-all duration-500',
-                                                    isOut ? 'bg-red-500 w-full opacity-30' : 
+                                                    'h-full transition-all duration-700',
+                                                    isOut ? 'bg-red-500 w-full opacity-20' : 
                                                     isLow ? 'bg-amber-500' : 'bg-emerald-500'
                                                 )}
                                                 style={{ width: `${isOut ? 100 : percentage}%` }}
@@ -222,23 +238,28 @@ export default function InventoryOverviewPage() {
                             }
                         },
                         {
-                            key: 'prices',
-                            header: 'Precios (C/V)',
-                            render: (p) => (
-                                <div className="text-xs">
-                                    <p className="text-gray-500">C: {fmt(p.purchase_price || 0)}</p>
-                                    <p className="text-gray-900 dark:text-white font-medium">V: {fmt(p.sale_price || 0)}</p>
-                                </div>
-                            )
+                            key: 'purchase_price',
+                            header: 'Costo',
+                            align: 'right',
+                            render: (p) => <span className="text-sm text-gray-500">{fmt(p.purchase_price || 0)}</span>
                         },
                         {
-                            key: 'value',
+                            key: 'sale_price',
+                            header: 'Venta',
+                            align: 'right',
+                            render: (p) => <span className="text-sm font-semibold text-gray-900 dark:text-white">{fmt(p.sale_price || 0)}</span>
+                        },
+                        {
+                            key: 'investment',
                             header: 'Inversión',
                             align: 'right',
                             render: (p) => (
-                                <span className="font-bold text-sm">
-                                    {fmt(p.stock * (p.purchase_price || 0))}
-                                </span>
+                                <div className="text-right">
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                        {fmt(p.stock * (p.purchase_price || 0))}
+                                    </p>
+                                    <p className="text-[10px] text-gray-400">Capital en stock</p>
+                                </div>
                             )
                         },
                         {
@@ -246,17 +267,17 @@ export default function InventoryOverviewPage() {
                             header: '',
                             align: 'right',
                             render: (p) => (
-                                <div className="flex items-center justify-end gap-1">
+                                <div className="flex items-center justify-end gap-1.5">
                                     <button 
                                         onClick={() => router.push(`/inventory/kardex?product_id=${p.id}`)}
-                                        className="p-1.5 text-gray-500 hover:text-emerald-500 transition-colors"
+                                        className="p-2 text-gray-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-all"
                                         title="Ver Kardex"
                                     >
                                         <ArrowPathIcon className="w-5 h-5" />
                                     </button>
                                     <button 
-                                        onClick={() => router.push(`/inventory/adjustments?product_id=${p.id}`)}
-                                        className="p-1.5 text-gray-500 hover:text-amber-500 transition-colors"
+                                        onClick={() => router.push(`/inventory/adjustments?product_id=${p.id}&action=adjust`)}
+                                        className="p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-all"
                                         title="Ajustar Stock"
                                     >
                                         <AdjustmentsHorizontalIcon className="w-5 h-5" />

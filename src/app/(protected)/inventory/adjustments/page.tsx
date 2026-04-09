@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     PlusIcon,
     ArrowUpIcon,
@@ -22,8 +23,9 @@ const reasonLabels: Record<string, string> = {
 };
 
 const StockAdjustmentsPage = () => {
+    const searchParams = useSearchParams();
     const { adjustments, isLoading, fetchAdjustments, createAdjustment } = useInventoryStore();
-    const { products, fetchProducts } = useProductStore();
+    const { products, fetchProducts, getProduct } = useProductStore();
     const [showModal, setShowModal] = useState(false);
     const [productSearch, setProductSearch] = useState('');
     const [formData, setFormData] = useState({
@@ -39,6 +41,26 @@ const StockAdjustmentsPage = () => {
         fetchAdjustments();
         fetchProducts({ per_page: 100 });
     }, [fetchAdjustments, fetchProducts]);
+
+    // Handle deep link for adjustment
+    useEffect(() => {
+        const productId = searchParams.get('product_id');
+        const action = searchParams.get('action');
+
+        if (productId && action === 'adjust' && products.length > 0) {
+            const product = products.find(p => p.id === productId);
+            if (product) {
+                handleProductSelect(product);
+                setShowModal(true);
+            } else {
+                // If not in the initial 100, fetch it specifically
+                getProduct(productId).then(p => {
+                    handleProductSelect(p);
+                    setShowModal(true);
+                });
+            }
+        }
+    }, [searchParams, products, getProduct]);
 
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(productSearch.toLowerCase()) ||

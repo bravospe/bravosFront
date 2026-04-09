@@ -192,5 +192,51 @@ export const useInventoryStore = create<InventoryState>((set, _get) => ({
         }
     },
 
+    reconcileInitialStock: async (products) => {
+        const companyId = ensureCompany()
+        if (!companyId) throw new Error('No company selected')
+
+        set({ isLoading: true, error: null })
+        let success = 0
+        let failed = 0
+
+        // 1. Obtener todos los ajustes previos para evitar duplicados
+        try {
+            const adjRes = await api.get(`/companies/${companyId}/inventory/adjustments`, {
+                params: { reason: 'initial', per_page: 1000 }
+            })
+            const existingIds = new Set((adjRes.data.data || []).map((a: any) => a.product_id))
+
+            // 2. Filtrar productos que necesitan conciliación (stock > 0 y sin ajuste inicial)
+            const toReconcile = products.filter(p => p.stock > 0 && !existingIds.has(p.id))
+
+            // 3. Crear ajustes en serie (para no saturar la API)
+            for (const prod of toReconcile) {
+                try {
+                    await api.post(`/companies/${companyId}/inventory/adjustments`, {
+                        product_id: prod.id,
+                        adjustment_type: 'increase',
+                        reason: 'initial',
+                        quantity: prod.stock,
+                        notes: 'Conciliación automática de saldo inicial (Migración)'
+                    })
+                    success++
+                } catch (e) {
+                    console.error(`Error conciliando producto ${prod.id}:`, e)
+                    failed++
+                }
+            }
+
+            set({ isLoading: false })
+            return { success, failed }
+        } catch (error: any) {
+            set({
+                error: error.response?.data?.message || 'Error en la conciliación',
+                isLoading: false
+            })
+            return { success, failed }
+        }
+    },
+
     clearError: () => set({ error: null })
 }))

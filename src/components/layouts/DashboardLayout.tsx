@@ -166,6 +166,7 @@ const PERMISSION_MAP: Record<string, string> = {
   '/inventory/kardex': 'inventory.view',
   '/inventory/warehouses': 'inventory.view',
   '/inventory/adjustments': 'inventory.view',
+  '/inventory/reconciliation': 'inventory.view',
   '/inventory/branches': 'inventory.view',
   '/virtual-store': 'virtual_store.view',
   '/virtual-store/orders': 'virtual_store.view',
@@ -927,7 +928,6 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
         />
       </div>
 
-      {/* Bottom navigation — mobile only, hidden on /pos */}
       <BottomNav />
     </div>
   );

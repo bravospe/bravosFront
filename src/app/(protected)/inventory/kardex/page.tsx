@@ -8,6 +8,7 @@ import {
     ArrowDownIcon,
     DocumentTextIcon,
     CalendarIcon,
+    XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { Card, Badge } from '@/components/ui';
 import { useInventoryStore } from '@/stores/inventoryStore';
@@ -24,7 +25,11 @@ const KardexPage = () => {
     useEffect(() => {
         fetchStats();
         fetchProducts({ per_page: 100 });
-    }, [fetchStats, fetchProducts]);
+        // Cargar ajustes recientes por defecto si no hay producto
+        if (!selectedProduct) {
+            fetchAdjustments({ per_page: 20 });
+        }
+    }, [fetchStats, fetchProducts, fetchAdjustments, selectedProduct]);
 
     useEffect(() => {
         if (selectedProduct) {
@@ -37,7 +42,20 @@ const KardexPage = () => {
         p.code?.toLowerCase().includes(productSearch.toLowerCase())
     );
 
-    const getMovementBadge = (type: string) => {
+    const handleProductSelect = (product: any) => {
+        setSelectedProduct(product.id);
+        setProductSearch(`${product.code || ''} - ${product.name}`);
+    };
+
+    const getMovementBadge = (type: string, reason?: string) => {
+        if (reason === 'initial') {
+            return (
+                <Badge variant="info" size="sm">
+                    <ArrowPathIcon className="w-3 h-3 mr-1" />
+                    Saldo Inicial
+                </Badge>
+            );
+        }
         const config: Record<string, { variant: 'success' | 'danger' | 'warning', label: string, icon: typeof ArrowUpIcon }> = {
             entry: { variant: 'success', label: 'Entrada', icon: ArrowUpIcon },
             exit: { variant: 'danger', label: 'Salida', icon: ArrowDownIcon },
@@ -97,25 +115,43 @@ const KardexPage = () => {
                             <input
                                 type="text"
                                 placeholder="Buscar producto..."
-                                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
+                                className="w-full pl-10 pr-10 py-2 rounded-lg border border-gray-300 dark:border-[#232834] bg-white dark:bg-black"
                                 value={productSearch}
-                                onChange={(e) => setProductSearch(e.target.value)}
+                                onChange={(e) => {
+                                    setProductSearch(e.target.value);
+                                    if (!e.target.value) setSelectedProduct('');
+                                }}
                             />
+                            {selectedProduct && (
+                                <button 
+                                    onClick={() => { setSelectedProduct(''); setProductSearch(''); }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <XMarkIcon className="w-5 h-5" />
+                                </button>
+                            )}
                         </div>
-                        {productSearch && (
-                            <div className="mt-2 max-h-40 overflow-y-auto border border-gray-200 dark:border-[#232834] rounded-lg">
-                                {filteredProducts.slice(0, 10).map((product) => (
-                                    <button
-                                        key={product.id}
-                                        onClick={() => {
-                                            setSelectedProduct(product.id);
-                                            setProductSearch(`${product.code} - ${product.name}`);
-                                        }}
-                                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-[#1E2230] border-b last:border-b-0"
-                                    >
-                                        <span className="font-medium">{product.code}</span> - {product.name}
-                                    </button>
-                                ))}
+                        {productSearch && !selectedProduct && (
+                            <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-[#0D1117] border border-gray-200 dark:border-[#232834] rounded-lg shadow-xl">
+                                {filteredProducts.length > 0 ? (
+                                    filteredProducts.slice(0, 10).map((product) => (
+                                        <button
+                                            key={product.id}
+                                            onClick={() => handleProductSelect(product)}
+                                            className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-[#1E2230] border-b border-gray-100 dark:border-[#232834] last:border-0"
+                                        >
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{product.name}</p>
+                                                    <p className="text-xs text-gray-500 font-mono">{product.code}</p>
+                                                </div>
+                                                <Badge variant="secondary" size="sm">Stock: {product.stock}</Badge>
+                                            </div>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="p-4 text-center text-sm text-gray-500">No se encontraron productos</div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -169,12 +205,37 @@ const KardexPage = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-[#1E2230]">
                             {!selectedProduct ? (
-                                <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
-                                        <DocumentTextIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                                        Selecciona un producto para ver su kardex
-                                    </td>
-                                </tr>
+                                adjustments.length > 0 ? (
+                                    adjustments.map((entry) => (
+                                        <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-[#161A22]/50">
+                                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                                {new Date(entry.created_at).toLocaleDateString('es-PE')}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {getMovementBadge(entry.adjustment_type === 'increase' ? 'entry' : 'exit', entry.reason)}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm">
+                                                <p className="font-medium text-gray-900 dark:text-white">{entry.product_name}</p>
+                                                <p className="text-xs text-gray-500">{entry.reason}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right font-medium">
+                                                <span className={entry.adjustment_type === 'decrease' ? 'text-red-600' : 'text-green-600'}>
+                                                    {entry.adjustment_type === 'decrease' ? '-' : '+'}{entry.quantity}
+                                                </span>
+                                            </td>
+                                            <td colSpan={3} className="px-4 py-3 text-right text-xs text-gray-400">
+                                                Saldo solo visible al seleccionar producto
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                                            <DocumentTextIcon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                                            Selecciona un producto para ver su historial detallado
+                                        </td>
+                                    </tr>
+                                )
                             ) : isLoading ? (
                                 [...Array(5)].map((_, i) => (
                                     <tr key={i} className="animate-pulse">
@@ -199,7 +260,7 @@ const KardexPage = () => {
                                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                                             {new Date(entry.created_at).toLocaleDateString('es-PE')}
                                         </td>
-                                        <td className="px-4 py-3">{getMovementBadge(entry.movement_type)}</td>
+                                        <td className="px-4 py-3">{getMovementBadge(entry.movement_type, entry.reason)}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{entry.reason}</td>
                                         <td className="px-4 py-3 text-sm text-right font-medium">
                                             <span className={entry.movement_type === 'exit' ? 'text-red-600' : 'text-green-600'}>
@@ -207,13 +268,13 @@ const KardexPage = () => {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
-                                            S/ {entry.unit_cost.toFixed(2)}
+                                            S/ {(entry.unit_cost || 0).toFixed(2)}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900 dark:text-white">
                                             {entry.balance_quantity}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900 dark:text-white">
-                                            S/ {entry.balance_value.toFixed(2)}
+                                            S/ {(entry.balance_value || 0).toFixed(2)}
                                         </td>
                                     </tr>
                                 ))

@@ -106,6 +106,7 @@ const navigation: NavigationItem[] = [
     name: 'Inventario',
     icon: ArchiveBoxIcon,
     children: [
+      { name: 'Control de Stock', href: '/inventory', icon: ChartBarIcon },
       { name: 'Kardex', href: '/inventory/kardex', icon: ArchiveBoxIcon },
       { name: 'Almacenes', href: '/inventory/warehouses', icon: BuildingOffice2Icon },
       { name: 'Ajustes de Stock', href: '/inventory/adjustments', icon: AdjustmentsHorizontalIcon },

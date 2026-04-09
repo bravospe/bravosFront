@@ -21,6 +21,10 @@ export interface Client {
     is_active: boolean;
     created_at: string;
     updated_at: string;
+    // Sales stats (returned when with_stats=1)
+    sales_total?: number;
+    sales_count?: number;
+    labels?: Array<{ id: string; name: string; color: string }>;
 }
 
 interface PaginatedResponse<T> {
@@ -42,7 +46,7 @@ interface ClientState {
     error: string | null;
     meta: PaginatedResponse<Client>['meta'] | null;
 
-    fetchClients: (params?: { page?: number; per_page?: number; search?: string; category_id?: number; label_id?: string }) => Promise<void>;
+    fetchClients: (params?: { page?: number; per_page?: number; search?: string; category_id?: number; label_id?: string; with_stats?: 1 }) => Promise<void>;
     getClient: (id: string) => Promise<Client>;
     createClient: (data: Partial<Client>) => Promise<Client>;
     updateClient: (id: string, data: Partial<Client>) => Promise<Client>;
@@ -73,6 +77,7 @@ export const useClientStore = create<ClientState>((set) => ({
                     search: params?.search,
                     category_id: params?.category_id,
                     label_id: params?.label_id,
+                    with_stats: 1,
                 },
             });
 

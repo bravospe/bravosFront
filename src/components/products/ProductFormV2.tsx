@@ -9,6 +9,7 @@ import { useBrandStore } from '@/stores/brandStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useInventoryStore } from '@/stores/inventoryStore';
 import { useWarehouseStore } from '@/stores/warehouseStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Button, Input, Toggle } from '@/components/ui';
 import {
     ArrowLeftIcon,
@@ -182,6 +183,8 @@ const ProductFormV2 = ({ productId }: Props) => {
     const { units, fetchUnits } = useSettingsStore();
     const { createAdjustment } = useInventoryStore();
     const { warehouses, fetchWarehouses } = useWarehouseStore();
+    const { currentCompany, user } = useAuthStore();
+    const companyId = currentCompany?.id || user?.current_company_id || user?.companies?.[0]?.id || '';
 
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -323,15 +326,15 @@ const ProductFormV2 = ({ productId }: Props) => {
             if (data.unit_code) formData.append('unit_code', data.unit_code);
             if (data.unit_name) formData.append('unit_name', data.unit_name);
 
+            // Todas las imágenes ya están en el gestor de medios (mediaId obligatorio)
+            let primaryIndex = 0;
             productImages.forEach((img, index) => {
-                if (img.path) formData.append(`image_paths[${index}]`, img.path);
-                if (img.mediaId) formData.append(`media_ids[${index}]`, img.mediaId);
-                formData.append(`image_order[${index}]`, String(index));
-                formData.append(`image_primary[${index}]`, img.isPrimary ? '1' : '0');
+                if (img.mediaId) {
+                    formData.append(`media_ids[${index}]`, img.mediaId);
+                    formData.append(`image_primary[${index}]`, img.isPrimary ? '1' : '0');
+                    if (img.isPrimary) primaryIndex = index;
+                }
             });
-
-            const primaryImage = productImages.find((img) => img.isPrimary) || productImages[0];
-            if (primaryImage?.path) formData.append('image', primaryImage.path);
 
             let savedId = productId;
 
@@ -518,6 +521,7 @@ const ProductFormV2 = ({ productId }: Props) => {
                                 images={productImages}
                                 onChange={setProductImages}
                                 maxImages={10}
+                                companyId={companyId}
                             />
                         </SectionCard>
 

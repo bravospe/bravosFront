@@ -179,6 +179,7 @@ export interface Product {
   stock: number
   is_service: boolean
   is_active: boolean
+  status: 'active' | 'draft' | 'archived'
   tax_type: 'IGV' | 'EXONERADO' | 'INAFECTO'
   tax_percentage: number
   image?: string

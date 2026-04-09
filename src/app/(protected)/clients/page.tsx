@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Fragment, useMemo } from 'react';
-import { Tab, Menu, Transition } from '@headlessui/react';
+import { Menu, Transition } from '@headlessui/react';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -9,16 +9,15 @@ import {
   TrashIcon,
   TagIcon,
   UsersIcon,
-  ArrowPathIcon,
   EllipsisVerticalIcon,
   ClockIcon,
   BuildingOffice2Icon,
   UserIcon,
   XMarkIcon,
   ChevronUpDownIcon,
+  BanknotesIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '@/components/ui';
-import LabelSelect from '@/components/ui/LabelSelect';
 import { useClientStore } from '@/stores/clientStore';
 import { useLabelStore } from '@/stores/labelStore';
 import { useClientCategoryStore } from '@/stores/clientCategoryStore';
@@ -31,7 +30,13 @@ import toast from 'react-hot-toast';
 
 type DocumentTypeFilter = 'all' | 'empresa' | 'persona';
 type StatusFilter = 'all' | 'active' | 'inactive';
-type SortOption = 'name_asc' | 'name_desc' | 'newest' | 'oldest';
+type SortBy = 'name' | 'created_at' | 'sales_total' | 'sales_count';
+type SortOrder = 'asc' | 'desc';
+
+const fmt = (n?: number) =>
+  n != null
+    ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 0 }).format(n)
+    : null;
 
 export default function ClientsPage() {
   const { clients, isLoading: clientsLoading, meta, fetchClients, deleteClient } = useClientStore();
@@ -39,681 +44,532 @@ export default function ClientsPage() {
   const { categories, fetchCategories } = useClientCategoryStore();
 
   const [search, setSearch] = useState('');
-  const [selectedLabel, setSelectedLabel] = useState<string | undefined>();
-  const [selectedCategory, setSelectedCategory] = useState<number | undefined>();
-  const [documentTypeFilter, setDocumentTypeFilter] = useState<DocumentTypeFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [labelFilter, setLabelFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  // Client Modal State
+  const [docTypeFilter, setDocTypeFilter] = useState<DocumentTypeFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [salesMin, setSalesMin] = useState('');
+  const [salesMax, setSalesMax] = useState('');
+  const [sortBy, setSortBy] = useState<SortBy>('created_at');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-
-  // History Modal State
   const [historyClient, setHistoryClient] = useState<Client | null>(null);
-
-  // Labels Dialog State
   const [isLabelsDialogOpen, setIsLabelsDialogOpen] = useState(false);
 
   useEffect(() => {
-    fetchClients({ page, search, label_id: selectedLabel, category_id: selectedCategory });
-  }, [page, search, selectedLabel, selectedCategory, fetchClients]);
+    fetchClients({
+      page,
+      search: search || undefined,
+      label_id: labelFilter || undefined,
+      category_id: categoryFilter ? Number(categoryFilter) : undefined,
+    });
+  }, [page, search, labelFilter, categoryFilter, fetchClients]);
+
+  useEffect(() => { setPage(1); }, [search, labelFilter, categoryFilter, docTypeFilter, statusFilter, salesMin, salesMax]);
 
   useEffect(() => {
     fetchLabels();
     fetchCategories();
   }, [fetchLabels, fetchCategories]);
 
-  // Client-side filters (document type & status) applied on top of server-side results
   const filteredClients = useMemo(() => {
     let result = [...clients];
-
-    if (documentTypeFilter === 'empresa') {
-      result = result.filter(c => c.document_type === 'RUC');
-    } else if (documentTypeFilter === 'persona') {
-      result = result.filter(c => ['DNI', 'CE', 'PASAPORTE'].includes(c.document_type));
-    }
-
-    if (statusFilter === 'active') {
-      result = result.filter(c => c.is_active);
-    } else if (statusFilter === 'inactive') {
-      result = result.filter(c => !c.is_active);
-    }
-
+    if (docTypeFilter === 'empresa') result = result.filter(c => c.document_type === 'RUC');
+    else if (docTypeFilter === 'persona') result = result.filter(c => ['DNI', 'CE', 'PASAPORTE'].includes(c.document_type));
+    if (statusFilter === 'active') result = result.filter(c => c.is_active);
+    else if (statusFilter === 'inactive') result = result.filter(c => !c.is_active);
+    if (salesMin !== '') result = result.filter(c => (c.sales_total ?? 0) >= parseFloat(salesMin));
+    if (salesMax !== '') result = result.filter(c => (c.sales_total ?? 0) <= parseFloat(salesMax));
     result.sort((a, b) => {
-      if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'es');
-      if (sortBy === 'name_desc') return b.name.localeCompare(a.name, 'es');
-      if (sortBy === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      // newest
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      let cmp = 0;
+      if (sortBy === 'name') cmp = a.name.localeCompare(b.name, 'es');
+      else if (sortBy === 'sales_total') cmp = (a.sales_total ?? 0) - (b.sales_total ?? 0);
+      else if (sortBy === 'sales_count') cmp = (a.sales_count ?? 0) - (b.sales_count ?? 0);
+      else cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return sortOrder === 'asc' ? cmp : -cmp;
     });
-
     return result;
-  }, [clients, documentTypeFilter, statusFilter, sortBy]);
+  }, [clients, docTypeFilter, statusFilter, salesMin, salesMax, sortBy, sortOrder]);
 
-  const hasActiveFilters = selectedLabel || selectedCategory || documentTypeFilter !== 'all' || statusFilter !== 'all';
+  const activeFilterCount = [
+    docTypeFilter !== 'all',
+    statusFilter !== 'all',
+    !!labelFilter,
+    !!categoryFilter,
+    !!(salesMin || salesMax),
+  ].filter(Boolean).length;
 
-  const clearAllFilters = () => {
-    setSearch('');
-    setSelectedLabel(undefined);
-    setSelectedCategory(undefined);
-    setDocumentTypeFilter('all');
-    setStatusFilter('all');
-    setSortBy('newest');
-    setPage(1);
+  const hasActiveFilters = activeFilterCount > 0;
+
+  const clearFilters = () => {
+    setDocTypeFilter('all'); setStatusFilter('all');
+    setLabelFilter(''); setCategoryFilter('');
+    setSalesMin(''); setSalesMax('');
+    setSortBy('created_at'); setSortOrder('desc');
+    setSearch(''); setPage(1);
   };
 
-  // Client Handlers
-  const handleCreateClient = () => {
-    setEditingClient(null);
-    setIsClientModalOpen(true);
-  };
-
-  const handleEditClient = (client: Client) => {
-    setEditingClient(client);
-    setIsClientModalOpen(true);
-  };
-
+  const handleCreateClient = () => { setEditingClient(null); setIsClientModalOpen(true); };
+  const handleEditClient = (client: Client) => { setEditingClient(client); setIsClientModalOpen(true); };
   const handleDeleteClient = async (id: string) => {
     if (confirm('¿Estás seguro de eliminar este cliente?')) {
       await deleteClient(id);
-      toast.success('Cliente eliminado correctamente');
+      toast.success('Cliente eliminado');
     }
   };
 
-  const handleViewHistory = (client: Client) => {
-    setHistoryClient(client);
-  };
+  const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent';
+  const selectCls = inputCls + ' appearance-none pr-8 cursor-pointer';
 
-  const handleRefresh = () => {
-    fetchClients({ page, search, label_id: selectedLabel });
-    fetchLabels();
-    toast.success('Lista actualizada');
-  };
+  const docTypeTabs = [
+    { key: 'all' as DocumentTypeFilter, label: 'Todos' },
+    { key: 'empresa' as DocumentTypeFilter, label: 'Empresa', icon: BuildingOffice2Icon },
+    { key: 'persona' as DocumentTypeFilter, label: 'Persona Natural', icon: UserIcon },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <UsersIcon className="w-8 h-8 text-emerald-500" />
-            Gestión de Clientes
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Administra tu base de clientes, historial y etiquetas.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            className="hidden sm:flex"
+    <div className="space-y-4">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Clientes</h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsLabelsDialogOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-[#1E2230] border border-gray-300 dark:border-[#232834] rounded-lg hover:bg-gray-50 dark:hover:bg-[#232834] transition-colors"
           >
-            <ArrowPathIcon className="w-5 h-5" />
-          </Button>
-          <Button onClick={handleCreateClient} className="bg-emerald-500 hover:bg-emerald-600 text-white border-none shadow-lg shadow-emerald-500/20">
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Nuevo Cliente
-          </Button>
+            <TagIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Etiquetas</span>
+          </button>
+          <button
+            onClick={handleCreateClient}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Nuevo cliente</span>
+            <span className="sm:hidden">Nuevo</span>
+          </button>
         </div>
       </div>
 
-      <Tab.Group>
-        <Tab.List className="flex space-x-1 rounded-xl bg-gray-100 dark:bg-[#161A22] p-1 mb-6 max-w-md border border-gray-200 dark:border-[#232834]">
-          <Tab
-            className={({ selected }) =>
-              clsx(
-                'w-full rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200',
-                'focus:outline-none focus:ring-2 focus:ring-emerald-500/50',
-                selected
-                  ? 'bg-white text-emerald-600 shadow-sm dark:bg-[#1E2230] dark:text-white ring-1 ring-black/5 dark:ring-white/5'
-                  : 'text-gray-500 hover:bg-white/[0.5] hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1E2230]/50 dark:hover:text-gray-200'
-              )
-            }
-          >
-            Listado de Clientes
-          </Tab>
-          <Tab
-            className={({ selected }) =>
-              clsx(
-                'w-full rounded-lg py-2.5 text-sm font-medium leading-5 transition-all duration-200',
-                'focus:outline-none focus:ring-2 focus:ring-emerald-500/50',
-                selected
-                  ? 'bg-white text-emerald-600 shadow-sm dark:bg-[#1E2230] dark:text-white ring-1 ring-black/5 dark:ring-white/5'
-                  : 'text-gray-500 hover:bg-white/[0.5] hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1E2230]/50 dark:hover:text-gray-200'
-              )
-            }
-          >
-            <div className="flex items-center justify-center gap-2">
-              <TagIcon className="w-4 h-4" />
-              Etiquetas
-            </div>
-          </Tab>
-        </Tab.List>
+      {/* ── Card ── */}
+      <div className="bg-white dark:bg-black rounded-lg shadow-sm border border-gray-200 dark:border-[#232834]">
 
-        <Tab.Panels>
-          {/* Client List Panel */}
-          <Tab.Panel className="focus:outline-none">
-            <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-gray-100 dark:border-[#232834] overflow-visible"> {/* overflow-visible for dropdown */}
-              {/* Filters Bar */}
-              <div className="p-4 border-b border-gray-100 dark:border-[#232834] bg-gray-50/50 dark:bg-[#161A22]/50 space-y-3">
-                {/* Row 1: Search + Sort */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <input
-                      type="text"
-                      className="block w-full h-10 pl-9 pr-4 rounded-xl bg-white dark:bg-[#0D1117] text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-200 dark:ring-[#232834] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all text-sm"
-                      placeholder="Buscar por nombre, RUC, DNI o email..."
-                      value={search}
-                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    />
-                  </div>
-                  <div className="relative w-full sm:w-48">
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as SortOption)}
-                      className="w-full h-10 pl-3 pr-8 rounded-xl bg-white dark:bg-[#0D1117] text-gray-700 dark:text-gray-200 text-sm ring-1 ring-inset ring-gray-200 dark:ring-[#232834] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none cursor-pointer"
-                    >
-                      <option value="newest">Más reciente</option>
-                      <option value="oldest">Más antiguo</option>
-                      <option value="name_asc">Nombre A–Z</option>
-                      <option value="name_desc">Nombre Z–A</option>
-                    </select>
-                    <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Row 2: Tipo de cliente + Estado + Categoría + Etiqueta */}
-                <div className="flex flex-wrap gap-2 items-center">
-                  {/* Tipo de cliente pills */}
-                  <div className="flex items-center gap-1 bg-white dark:bg-[#0D1117] rounded-xl ring-1 ring-gray-200 dark:ring-[#232834] p-1">
-                    {(
-                      [
-                        { value: 'all' as DocumentTypeFilter, label: 'Todos', icon: null },
-                        { value: 'empresa' as DocumentTypeFilter, label: 'Empresa', icon: BuildingOffice2Icon },
-                        { value: 'persona' as DocumentTypeFilter, label: 'Persona Natural', icon: UserIcon },
-                      ]
-                    ).map(({ value, label, icon: Icon }) => (
-                      <button
-                        key={value}
-                        onClick={() => { setDocumentTypeFilter(value); setPage(1); }}
-                        className={clsx(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150',
-                          documentTypeFilter === value
-                            ? 'bg-emerald-500 text-white shadow-sm'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E2230]'
-                        )}
-                      >
-                        {Icon && <Icon className="w-3.5 h-3.5" />}
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Estado pills */}
-                  <div className="flex items-center gap-1 bg-white dark:bg-[#0D1117] rounded-xl ring-1 ring-gray-200 dark:ring-[#232834] p-1">
-                    {([
-                      { value: 'all', label: 'Todos' },
-                      { value: 'active', label: 'Activo' },
-                      { value: 'inactive', label: 'Inactivo' },
-                    ] as const).map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => { setStatusFilter(value); setPage(1); }}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150',
-                          statusFilter === value
-                            ? value === 'active'
-                              ? 'bg-blue-500 text-white shadow-sm'
-                              : value === 'inactive'
-                              ? 'bg-red-500 text-white shadow-sm'
-                              : 'bg-emerald-500 text-white shadow-sm'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E2230]'
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Categoría dropdown */}
-                  {categories.length > 0 && (
-                    <div className="relative w-44">
-                      <select
-                        value={selectedCategory ?? ''}
-                        onChange={(e) => { setSelectedCategory(e.target.value ? Number(e.target.value) : undefined); setPage(1); }}
-                        className="w-full h-9 pl-3 pr-8 rounded-xl bg-white dark:bg-[#0D1117] text-gray-700 dark:text-gray-200 text-xs ring-1 ring-inset ring-gray-200 dark:ring-[#232834] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none cursor-pointer"
-                      >
-                        <option value="">Categoría</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                      <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                    </div>
-                  )}
-
-                  {/* Etiqueta */}
-                  <div className="w-44">
-                    <LabelSelect
-                      labels={labels}
-                      value={selectedLabel}
-                      onChange={(val) => { setSelectedLabel(val); setPage(1); }}
-                      placeholder="Etiqueta"
-                    />
-                  </div>
-                </div>
-
-                {/* Row 3: Active filter chips + clear */}
-                {hasActiveFilters && (
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <span className="text-xs text-gray-400">Filtros activos:</span>
-                    {documentTypeFilter !== 'all' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium border border-emerald-500/20">
-                        {documentTypeFilter === 'empresa' ? 'Empresa' : 'Persona Natural'}
-                        <button onClick={() => setDocumentTypeFilter('all')}><XMarkIcon className="w-3 h-3" /></button>
-                      </span>
-                    )}
-                    {statusFilter !== 'all' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium border border-blue-500/20">
-                        {statusFilter === 'active' ? 'Activo' : 'Inactivo'}
-                        <button onClick={() => setStatusFilter('all')}><XMarkIcon className="w-3 h-3" /></button>
-                      </span>
-                    )}
-                    {selectedCategory && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-medium border border-purple-500/20">
-                        {categories.find(c => Number(c.id) === selectedCategory)?.name ?? 'Categoría'}
-                        <button onClick={() => setSelectedCategory(undefined)}><XMarkIcon className="w-3 h-3" /></button>
-                      </span>
-                    )}
-                    {selectedLabel && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs font-medium border border-orange-500/20">
-                        {labels.find(l => l.id === selectedLabel)?.name ?? 'Etiqueta'}
-                        <button onClick={() => setSelectedLabel(undefined)}><XMarkIcon className="w-3 h-3" /></button>
-                      </span>
-                    )}
-                    <button
-                      onClick={clearAllFilters}
-                      className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 underline underline-offset-2 transition-colors ml-1"
-                    >
-                      Limpiar todo
-                    </button>
-                  </div>
+        {/* Document type subtabs */}
+        <div className="border-b border-gray-200 dark:border-[#232834] overflow-x-auto">
+          <nav className="flex space-x-4 sm:space-x-6 px-4 min-w-max">
+            {docTypeTabs.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setDocTypeFilter(key)}
+                className={clsx(
+                  'py-3 px-1 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5',
+                  docTypeFilter === key
+                    ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
                 )}
-              </div>
+              >
+                {Icon && <Icon className="w-4 h-4" />}
+                {label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto min-h-[400px]">
-                <table className="min-w-full divide-y divide-gray-100 dark:divide-[#232834]">
-                  <thead className="bg-gray-50 dark:bg-[#161A22]">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo / Doc.</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Etiquetas</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Contacto</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-black divide-y divide-gray-100 dark:divide-[#232834]">
-                    {clientsLoading ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center">
-                          <div className="flex flex-col items-center justify-center">
-                            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                            <p className="text-gray-500 dark:text-gray-400">Cargando clientes...</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : filteredClients.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center">
-                          <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
-                            <div className="w-16 h-16 bg-gray-100 dark:bg-[#1E2230] rounded-full flex items-center justify-center mb-4">
-                              <UsersIcon className="w-8 h-8 text-gray-400" />
-                            </div>
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No se encontraron clientes</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                              Intenta ajustar los filtros de búsqueda o crea un nuevo cliente.
-                            </p>
-                            <Button onClick={handleCreateClient} variant="outline" size="sm">
-                              Crear Cliente
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredClients.map((client) => (
-                        <tr key={client.id} className="group hover:bg-gray-50 dark:hover:bg-[#161A22]/60 transition-colors duration-150 relative">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-sm ring-2 ring-white dark:ring-[#1E2230]">
-                                {client.name.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">{client.name}</div>
-                                {client.trade_name && (
-                                  <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
-                                    <span className="truncate">{client.trade_name}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex flex-col gap-1">
-                              <span className={clsx(
-                                'inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md text-xs font-semibold',
-                                client.document_type === 'RUC'
-                                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                                  : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
-                              )}>
-                                {client.document_type === 'RUC'
-                                  ? <><BuildingOffice2Icon className="w-3 h-3" /> Empresa</>
-                                  : <><UserIcon className="w-3 h-3" /> Persona Natural</>
-                                }
-                              </span>
-                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 font-mono">
-                                {client.document_type} {client.document_number}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-wrap gap-1.5 max-w-[200px]">
-                              {client.labels && client.labels.length > 0 ? (
-                                client.labels.map(label => (
-                                  <span
-                                    key={label.id}
-                                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border border-transparent"
-                                    style={{
-                                      backgroundColor: `${label.color}15`,
-                                      color: label.color,
-                                      borderColor: `${label.color}30`
-                                    }}
-                                  >
-                                    <span
-                                      className="w-1.5 h-1.5 rounded-full shadow-sm"
-                                      style={{ backgroundColor: label.color }}
-                                    />
-                                    {label.name}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-xs text-gray-400 italic">Sin etiquetas</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex flex-col gap-1">
-                              {client.email && (
-                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/50"></span>
-                                  {client.email}
-                                </div>
-                              )}
-                              {client.phone && (
-                                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400/50"></span>
-                                  {client.phone}
-                                </div>
-                              )}
-                              {!client.email && !client.phone && (
-                                <span className="text-xs text-gray-400 italic">No disponible</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={clsx(
-                              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium',
-                              client.is_active
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-gray-200 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400'
-                            )}>
-                              <span className={clsx('w-1.5 h-1.5 rounded-full', client.is_active ? 'bg-emerald-500' : 'bg-gray-400')} />
-                              {client.is_active ? 'Activo' : 'Inactivo'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            {/* Desktop Actions */}
-                            <div className="hidden md:flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleViewHistory(client)}
-                                className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-500 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                                title="Historial de Compras"
-                              >
-                                <ClockIcon className="h-5 w-5" />
-                              </button>
-                              <button
-                                onClick={() => handleEditClient(client)}
-                                className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                                title="Editar cliente"
-                              >
-                                <PencilIcon className="h-5 w-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteClient(client.id)}
-                                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                title="Eliminar cliente"
-                              >
-                                <TrashIcon className="h-5 w-5" />
-                              </button>
-                            </div>
+        {/* Search + filters toggle */}
+        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-[#232834] space-y-3">
 
-                            {/* Mobile Actions Dropdown */}
-                            <div className="md:hidden">
-                              <Menu as="div" className="relative inline-block text-left z-10">
-                                <Menu.Button className="p-2 text-gray-400 hover:text-emerald-500 rounded-full hover:bg-gray-100 dark:hover:bg-[#1E2230] transition-colors focus:outline-none">
-                                  <EllipsisVerticalIcon className="w-5 h-5" />
-                                </Menu.Button>
-
-                                <Transition
-                                  as={Fragment}
-                                  enter="transition ease-out duration-100"
-                                  enterFrom="transform opacity-0 scale-95"
-                                  enterTo="transform opacity-100 scale-100"
-                                  leave="transition ease-in duration-75"
-                                  leaveFrom="transform opacity-100 scale-100"
-                                  leaveTo="transform opacity-0 scale-95"
-                                >
-                                  <Menu.Items className="absolute right-0 mt-2 w-48 origin-top-right rounded-xl bg-white dark:bg-[#161A22] shadow-lg ring-1 ring-black/5 dark:ring-white/5 focus:outline-none z-50 overflow-hidden divide-y divide-gray-100 dark:divide-[#232834]">
-                                    <div className="px-1 py-1">
-                                      <Menu.Item>
-                                        {({ active }) => (
-                                          <button
-                                            onClick={() => handleViewHistory(client)}
-                                            className={clsx(
-                                              'group flex w-full items-center rounded-lg px-2 py-2 text-sm',
-                                              active ? 'bg-emerald-500/10 text-emerald-500' : 'text-gray-700 dark:text-gray-300'
-                                            )}
-                                          >
-                                            <ClockIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                                            Historial de Compras
-                                          </button>
-                                        )}
-                                      </Menu.Item>
-                                    </div>
-                                    <div className="px-1 py-1">
-                                      <Menu.Item>
-                                        {({ active }) => (
-                                          <button
-                                            onClick={() => handleEditClient(client)}
-                                            className={clsx(
-                                              'group flex w-full items-center rounded-lg px-2 py-2 text-sm',
-                                              active ? 'bg-blue-500/10 text-blue-500' : 'text-gray-700 dark:text-gray-300'
-                                            )}
-                                          >
-                                            <PencilIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                                            Editar
-                                          </button>
-                                        )}
-                                      </Menu.Item>
-                                      <Menu.Item>
-                                        {({ active }) => (
-                                          <button
-                                            onClick={() => handleDeleteClient(client.id)}
-                                            className={clsx(
-                                              'group flex w-full items-center rounded-lg px-2 py-2 text-sm',
-                                              active ? 'bg-red-500/10 text-red-500' : 'text-gray-700 dark:text-gray-300'
-                                            )}
-                                          >
-                                            <TrashIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-                                            Eliminar
-                                          </button>
-                                        )}
-                                      </Menu.Item>
-                                    </div>
-                                  </Menu.Items>
-                                </Transition>
-                              </Menu>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {meta && meta.last_page > 1 && (
-                <div className="px-6 py-4 border-t border-gray-100 dark:border-[#232834] bg-gray-50/50 dark:bg-[#161A22]/50 flex items-center justify-between">
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                    {documentTypeFilter !== 'all' || statusFilter !== 'all'
-                      ? <><span className="font-medium text-gray-900 dark:text-white">{filteredClients.length}</span> de {meta.total} clientes (filtrado)</>
-                      : <>Mostrando <span className="font-medium text-gray-900 dark:text-white">{meta.from}</span> – <span className="font-medium text-gray-900 dark:text-white">{meta.to}</span> de <span className="font-medium text-gray-900 dark:text-white">{meta.total}</span> resultados</>
-                    }
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="bg-white dark:bg-[#0D1117]"
-                    >
-                      Anterior
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => p + 1)}
-                      disabled={page === (meta.last_page || 1)}
-                      className="bg-white dark:bg-[#0D1117]"
-                    >
-                      Siguiente
-                    </Button>
-                  </div>
-                </div>
-              )}
+          {/* Search row */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, RUC, DNI o email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={clsx(inputCls, 'pl-9')}
+              />
             </div>
-          </Tab.Panel>
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={clsx(
+                'inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border rounded-lg transition-colors whitespace-nowrap',
+                showFilters || hasActiveFilters
+                  ? 'text-gray-900 dark:text-white bg-gray-100 dark:bg-[#232834] border-gray-300 dark:border-[#232834]'
+                  : 'text-gray-600 dark:text-gray-300 bg-white dark:bg-[#1E2230] border-gray-300 dark:border-[#232834] hover:bg-gray-50 dark:hover:bg-[#232834]'
+              )}
+            >
+              <AdjustmentsHorizontalIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">Filtros</span>
+              {hasActiveFilters && (
+                <span className="inline-flex items-center justify-center w-4 h-4 text-xs bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
 
-          {/* Labels Tab */}
-          <Tab.Panel className="focus:outline-none">
-            <div className="bg-white dark:bg-black rounded-2xl shadow-sm border border-gray-100 dark:border-[#232834] p-6 lg:p-8">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Etiquetas de Clientes</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Organiza tus clientes usando etiquetas personalizadas para segmentación marketing.
-                  </p>
-                </div>
-                <Button onClick={() => setIsLabelsDialogOpen(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white border-none">
-                  <PlusIcon className="h-5 w-5 mr-2" />
-                  Nueva Etiqueta
-                </Button>
-              </div>
+          {/* Expanded filters */}
+          {showFilters && (
+            <div className="flex flex-wrap gap-2 items-end pt-1">
 
-              {labels.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {labels.map((label) => (
-                    <div
-                      key={label.id}
-                      className="group relative p-5 rounded-2xl border border-gray-200 dark:border-[#232834] bg-white dark:bg-[#161A22] hover:shadow-lg hover:border-emerald-500/30 transition-all duration-300"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div
-                          className="w-12 h-12 rounded-xl flex items-center justify-center shadow-inner"
-                          style={{ backgroundColor: `${label.color}15` }}
-                        >
-                          <TagIcon className="w-6 h-6" style={{ color: label.color }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div
-                              className="w-2 h-2 rounded-full ring-2 ring-white dark:ring-[#161A22]"
-                              style={{ backgroundColor: label.color }}
-                            />
-                            <h4 className="font-bold text-gray-900 dark:text-white truncate text-base">
-                              {label.name}
-                            </h4>
-                          </div>
-                          {label.description ? (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2.5em]">
-                              {label.description}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-gray-400 italic min-h-[2.5em]">Sin descripción</p>
-                          )}
-
-                          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-[#232834] flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-[#0D1117] px-2 py-1 rounded-md">
-                              {label.clients_count || 0} clientes
-                            </span>
-                            <button
-                              onClick={() => setIsLabelsDialogOpen(true)}
-                              className="text-xs text-emerald-500 hover:text-emerald-400 font-medium hover:underline cursor-pointer"
-                            >
-                              Editar
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+              {/* Estado */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 px-0.5">Estado</span>
+                <div className="flex gap-1 bg-gray-100 dark:bg-[#1E2230] rounded-lg p-1">
+                  {([
+                    { v: 'all' as StatusFilter, l: 'Todos' },
+                    { v: 'active' as StatusFilter, l: 'Activo' },
+                    { v: 'inactive' as StatusFilter, l: 'Inactivo' },
+                  ]).map(({ v, l }) => (
+                    <button key={v} onClick={() => setStatusFilter(v)}
+                      className={clsx(
+                        'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
+                        statusFilter === v
+                          ? 'bg-white dark:bg-[#232834] text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      )}>
+                      {l}
+                    </button>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-16 bg-gray-50 dark:bg-[#161A22]/30 rounded-2xl border border-dashed border-gray-300 dark:border-[#232834]">
-                  <div className="w-16 h-16 bg-white dark:bg-[#1E2230] rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                    <TagIcon className="w-8 h-8 text-gray-300 dark:text-gray-600" />
+              </div>
+
+              {/* Categoría */}
+              {categories.length > 0 && (
+                <div className="flex flex-col gap-1 min-w-[150px]">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 px-0.5">Categoría</span>
+                  <div className="relative">
+                    <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={selectCls}>
+                      <option value="">Todas</option>
+                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   </div>
-                  <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">No hay etiquetas creadas</h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-xs mx-auto">
-                    Crea etiquetas para clasificar a tus clientes (ej. VIP, Mayorista, Nuevo).
-                  </p>
-                  <Button onClick={() => setIsLabelsDialogOpen(true)} variant="outline">
-                    <PlusIcon className="w-4 h-4 mr-2" />
-                    Crear primera etiqueta
-                  </Button>
+                </div>
+              )}
+
+              {/* Etiqueta */}
+              {labels.length > 0 && (
+                <div className="flex flex-col gap-1 min-w-[150px]">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 px-0.5">Etiqueta</span>
+                  <div className="relative">
+                    <select value={labelFilter} onChange={(e) => setLabelFilter(e.target.value)} className={selectCls}>
+                      <option value="">Todas</option>
+                      {labels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                    <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+
+              {/* Vol. ventas */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 px-0.5 flex items-center gap-1">
+                  <BanknotesIcon className="w-3.5 h-3.5" /> Vol. ventas (S/)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <input type="number" placeholder="Mín" min="0" value={salesMin}
+                    onChange={(e) => setSalesMin(e.target.value)}
+                    className="w-20 px-2 py-2 text-sm border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent"
+                  />
+                  <span className="text-gray-400 text-xs">—</span>
+                  <input type="number" placeholder="Máx" min="0" value={salesMax}
+                    onChange={(e) => setSalesMax(e.target.value)}
+                    className="w-20 px-2 py-2 text-sm border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Ordenar */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 px-0.5">Ordenar por</span>
+                <div className="flex gap-1">
+                  <div className="relative">
+                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}
+                      className="pl-3 pr-8 py-2 text-sm border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white appearance-none cursor-pointer">
+                      <option value="created_at">Fecha registro</option>
+                      <option value="name">Nombre</option>
+                      <option value="sales_total">Mayor venta</option>
+                      <option value="sales_count">Más compras</option>
+                    </select>
+                    <ChevronUpDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  </div>
+                  <button onClick={() => setSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
+                    className="px-2.5 py-2 text-sm border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#232834] transition-colors"
+                    title={sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}>
+                    {sortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Limpiar */}
+              {hasActiveFilters && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-transparent px-0.5">·</span>
+                  <button onClick={clearFilters}
+                    className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg transition-colors">
+                    <XMarkIcon className="w-3.5 h-3.5" /> Limpiar
+                  </button>
                 </div>
               )}
             </div>
-          </Tab.Panel>
-        </Tab.Panels>
-      </Tab.Group>
+          )}
+
+          {/* Active chips — always visible */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-1.5">
+              {docTypeFilter !== 'all' && (
+                <Chip label={docTypeFilter === 'empresa' ? 'Empresa' : 'Persona Natural'} onRemove={() => setDocTypeFilter('all')} />
+              )}
+              {statusFilter !== 'all' && (
+                <Chip label={statusFilter === 'active' ? 'Activo' : 'Inactivo'} onRemove={() => setStatusFilter('all')} />
+              )}
+              {categoryFilter && (
+                <Chip label={`Cat: ${categories.find(c => c.id === categoryFilter)?.name ?? ''}`} onRemove={() => setCategoryFilter('')} />
+              )}
+              {labelFilter && (
+                <Chip label={`Etiqueta: ${labels.find(l => l.id === labelFilter)?.name ?? ''}`} onRemove={() => setLabelFilter('')} />
+              )}
+              {(salesMin || salesMax) && (
+                <Chip label={`Ventas: S/${salesMin || '0'}–S/${salesMax || '∞'}`} onRemove={() => { setSalesMin(''); setSalesMax(''); }} />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-[#1E2230]">
+            <thead className="bg-gray-50 dark:bg-[#1E2230]/50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo / Doc.</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">Etiquetas</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell">Contacto</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <span className="flex items-center gap-1"><BanknotesIcon className="w-3.5 h-3.5" /> Ventas</span>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-black divide-y divide-gray-200 dark:divide-[#1E2230]">
+              {clientsLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="w-7 h-7 border-[3px] border-gray-900 dark:border-white border-t-transparent rounded-full animate-spin mb-3" />
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Cargando clientes...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredClients.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <UsersIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">No se encontraron clientes</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Ajusta los filtros o crea un nuevo cliente.</p>
+                    <button onClick={handleCreateClient} className="text-sm font-medium underline text-gray-900 dark:text-white">
+                      Crear cliente
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                filteredClients.map((client) => (
+                  <tr key={client.id} className="hover:bg-gray-50 dark:hover:bg-[#1E2230]/40 transition-colors">
+
+                    {/* Cliente */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-[#232834] flex items-center justify-center text-gray-600 dark:text-gray-300 font-semibold text-sm flex-shrink-0">
+                          {client.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[180px]">{client.name}</div>
+                          {client.trade_name && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[180px]">{client.trade_name}</div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Tipo / Doc */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={clsx(
+                          'inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded text-xs font-medium',
+                          client.document_type === 'RUC'
+                            ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400'
+                            : 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400'
+                        )}>
+                          {client.document_type === 'RUC'
+                            ? <><BuildingOffice2Icon className="w-3 h-3" />Empresa</>
+                            : <><UserIcon className="w-3 h-3" />Persona</>}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                          {client.document_type} {client.document_number}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Etiquetas */}
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <div className="flex flex-wrap gap-1 max-w-[160px]">
+                        {client.labels && client.labels.length > 0 ? (
+                          client.labels.map((label) => (
+                            <span key={label.id}
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                              style={{ backgroundColor: `${label.color}18`, color: label.color }}>
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: label.color }} />
+                              {label.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Contacto */}
+                    <td className="px-4 py-3 whitespace-nowrap hidden sm:table-cell">
+                      <div className="flex flex-col gap-0.5">
+                        {client.email && <span className="text-xs text-gray-600 dark:text-gray-300">{client.email}</span>}
+                        {client.phone && <span className="text-xs text-gray-500 dark:text-gray-400">{client.phone}</span>}
+                        {!client.email && !client.phone && <span className="text-xs text-gray-400">—</span>}
+                      </div>
+                    </td>
+
+                    {/* Ventas */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {client.sales_total != null ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{fmt(client.sales_total)}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {client.sales_count} {client.sales_count === 1 ? 'compra' : 'compras'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+
+                    {/* Estado */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={clsx(
+                        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
+                        client.is_active
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                      )}>
+                        <span className={clsx('w-1.5 h-1.5 rounded-full', client.is_active ? 'bg-green-500' : 'bg-gray-400')} />
+                        {client.is_active ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+
+                    {/* Acciones */}
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <div className="hidden md:flex items-center justify-end gap-1">
+                        <button onClick={() => setHistoryClient(client as any)}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded-lg transition-colors" title="Historial">
+                          <ClockIcon className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => handleEditClient(client as any)}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E2230] rounded-lg transition-colors" title="Editar">
+                          <PencilIcon className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => handleDeleteClient(client.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Eliminar">
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="md:hidden">
+                        <Menu as="div" className="relative inline-block text-left z-10">
+                          <Menu.Button className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1E2230] transition-colors focus:outline-none">
+                            <EllipsisVerticalIcon className="w-5 h-5" />
+                          </Menu.Button>
+                          <Transition as={Fragment}
+                            enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100"
+                            leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
+                            <Menu.Items className="absolute right-0 mt-1 w-40 origin-top-right rounded-lg bg-white dark:bg-[#1E2230] shadow-lg ring-1 ring-black/5 dark:ring-white/5 focus:outline-none z-50 overflow-hidden divide-y divide-gray-100 dark:divide-[#232834]">
+                              <div className="px-1 py-1">
+                                <Menu.Item>{({ active }) => (
+                                  <button onClick={() => setHistoryClient(client as any)}
+                                    className={clsx('group flex w-full items-center rounded-md px-2 py-2 text-sm', active ? 'bg-gray-100 dark:bg-[#232834] text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300')}>
+                                    <ClockIcon className="mr-2 h-4 w-4" /> Historial
+                                  </button>
+                                )}</Menu.Item>
+                                <Menu.Item>{({ active }) => (
+                                  <button onClick={() => handleEditClient(client as any)}
+                                    className={clsx('group flex w-full items-center rounded-md px-2 py-2 text-sm', active ? 'bg-gray-100 dark:bg-[#232834] text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300')}>
+                                    <PencilIcon className="mr-2 h-4 w-4" /> Editar
+                                  </button>
+                                )}</Menu.Item>
+                              </div>
+                              <div className="px-1 py-1">
+                                <Menu.Item>{({ active }) => (
+                                  <button onClick={() => handleDeleteClient(client.id)}
+                                    className={clsx('group flex w-full items-center rounded-md px-2 py-2 text-sm', active ? 'bg-red-50 dark:bg-red-900/20 text-red-600' : 'text-gray-700 dark:text-gray-300')}>
+                                    <TrashIcon className="mr-2 h-4 w-4" /> Eliminar
+                                  </button>
+                                )}</Menu.Item>
+                              </div>
+                            </Menu.Items>
+                          </Transition>
+                        </Menu>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {meta && meta.last_page > 1 && (
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-[#232834] flex items-center justify-between">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {hasActiveFilters
+                ? <><span className="font-medium text-gray-900 dark:text-white">{filteredClients.length}</span> de {meta.total} (filtrado)</>
+                : <>Mostrando <span className="font-medium text-gray-900 dark:text-white">{meta.from}</span>–<span className="font-medium text-gray-900 dark:text-white">{meta.to}</span> de <span className="font-medium text-gray-900 dark:text-white">{meta.total}</span></>
+              }
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-700 dark:text-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Anterior
+              </button>
+              <button onClick={() => setPage(p => p + 1)} disabled={page === meta.last_page}
+                className="px-3 py-1.5 text-sm font-medium border border-gray-300 dark:border-[#232834] rounded-lg bg-white dark:bg-[#1E2230] text-gray-700 dark:text-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Modals */}
-      <ClientModal
-        isOpen={isClientModalOpen}
-        onClose={() => setIsClientModalOpen(false)}
-        client={editingClient}
-      />
-
-      <ClientLabelsDialog
-        isOpen={isLabelsDialogOpen}
-        onClose={() => setIsLabelsDialogOpen(false)}
-      />
-
-      <ClientHistoryModal
-        isOpen={!!historyClient}
-        onClose={() => setHistoryClient(null)}
-        client={historyClient}
-      />
+      <ClientModal isOpen={isClientModalOpen} onClose={() => setIsClientModalOpen(false)} client={editingClient} />
+      <ClientLabelsDialog isOpen={isLabelsDialogOpen} onClose={() => setIsLabelsDialogOpen(false)} />
+      <ClientHistoryModal isOpen={!!historyClient} onClose={() => setHistoryClient(null)} client={historyClient} />
     </div>
+  );
+}
+
+function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-[#1E2230] text-gray-700 dark:text-gray-300 rounded-full border border-gray-200 dark:border-[#232834]">
+      {label}
+      <button onClick={onRemove} className="ml-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+        <XMarkIcon className="w-3 h-3" />
+      </button>
+    </span>
   );
 }

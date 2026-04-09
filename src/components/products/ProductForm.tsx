@@ -7,6 +7,7 @@ import { useProductStore } from '@/stores/productStore';
 import { useCategoryStore } from '@/stores/categoryStore';
 import { useBrandStore } from '@/stores/brandStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Button, Input, Toggle } from '@/components/ui';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
@@ -43,6 +44,8 @@ const ProductForm = ({ productId }: ProductFormProps) => {
     const { categories, fetchCategories } = useCategoryStore();
     const { brands, fetchBrands } = useBrandStore();
     const { units, fetchUnits } = useSettingsStore();
+    const { currentCompany, user } = useAuthStore();
+    const companyId = currentCompany?.id || user?.current_company_id || user?.companies?.[0]?.id || '';
 
     // Multi-image state using ProductMediaManager
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
@@ -382,6 +385,7 @@ const ProductForm = ({ productId }: ProductFormProps) => {
                             images={productImages}
                             onChange={setProductImages}
                             maxImages={10}
+                            companyId={companyId}
                         />
                     </div>
                 </div>

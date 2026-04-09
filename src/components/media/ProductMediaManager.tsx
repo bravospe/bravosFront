@@ -15,12 +15,7 @@ import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import MediaGalleryModal from './MediaGalleryModal';
-import { MediaItem } from '@/services/mediaService';
-import { useAuthStore } from '@/stores/authStore';
-import axios from 'axios';
-
-import { getApiUrl } from '@/utils/apiConfig';
-const API_BASE = getApiUrl();
+import { MediaItem, mediaService } from '@/services/mediaService';
 
 export interface ProductImage {
   id: string;
@@ -38,6 +33,7 @@ interface ProductMediaManagerProps {
   images: ProductImage[];
   onChange: (images: ProductImage[]) => void;
   maxImages?: number;
+  companyId: string;
 }
 
 // Sortable Image Item Component
@@ -171,8 +167,8 @@ const ProductMediaManager = ({
   images,
   onChange,
   maxImages = 10,
+  companyId,
 }: ProductMediaManagerProps) => {
-  const { token } = useAuthStore();
   const [dragOver, setDragOver] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showGallery, setShowGallery] = useState(false);
@@ -193,11 +189,11 @@ const ProductMediaManager = ({
     }
   }, [onChange]);
 
-  // Upload file immediately and add to images
+  // Upload file directly to media library
   const uploadFile = async (file: File) => {
     const tempId = `uploading-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Create temporary preview
+
+    // Create temporary preview while uploading
     const reader = new FileReader();
     reader.onloadend = async () => {
       const newImage: ProductImage = {
@@ -208,47 +204,42 @@ const ProductMediaManager = ({
         uploadProgress: 0,
         isPrimary: localImages.length === 0,
       };
-      
-      const updatedImages = [...localImages, newImage];
-      setLocalImages(updatedImages);
+
+      setLocalImages(prev => [...prev, newImage]);
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('type', 'product');
-
-        const response = await axios.post(`${API_BASE}/media/upload`, formData, {
-          headers: { 'Authorization': `Bearer ${token}` },
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-              setLocalImages(prev => prev.map(img =>
-                img.id === tempId ? { ...img, uploadProgress: progress } : img
-              ));
-            }
+        const response = await mediaService.upload(companyId, file, {
+          collection: 'products',
+          onProgress: (progress) => {
+            setLocalImages(prev => prev.map(img =>
+              img.id === tempId ? { ...img, uploadProgress: progress } : img
+            ));
           },
         });
 
-        // Update with server data
+        const media = response.data;
+
         setLocalImages(prev => {
           const updated = prev.map(img =>
             img.id === tempId
               ? {
                   ...img,
-                  id: response.data.data.filename || tempId,
-                  url: response.data.data.url,
-                  path: response.data.data.path,
+                  id: media.id,
+                  url: media.url,
+                  path: media.path,
+                  name: media.name,
                   isUploading: false,
                   uploadProgress: undefined,
+                  isFromGallery: true,
+                  mediaId: media.id,
                 }
               : img
           );
-          // Update parent
           onChange(updated);
           return updated;
         });
-        
-        toast.success('Imagen subida');
+
+        toast.success('Imagen subida al gestor de medios');
       } catch (error: unknown) {
         console.error('Upload error:', error);
         setLocalImages(prev => {
@@ -486,7 +477,6 @@ const ProductMediaManager = ({
         onSelect={handleGallerySelect}
         multiple
         maxSelect={maxImages - localImages.length}
-        collection="products"
         selectedIds={localImages.filter(img => img.mediaId).map(img => img.mediaId!)}
       />
     </div>

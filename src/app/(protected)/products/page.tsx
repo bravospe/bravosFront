@@ -7,18 +7,18 @@ import {
   MagnifyingGlassIcon,
   FolderIcon,
   FolderOpenIcon,
-  SwatchIcon,
-  FunnelIcon,
   ArrowsUpDownIcon,
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
-  ChevronDownIcon,
   ClockIcon,
   XMarkIcon,
   PencilIcon,
   TrashIcon,
   ArrowTopRightOnSquareIcon,
   AdjustmentsHorizontalIcon,
+  ArchiveBoxIcon,
+  NoSymbolIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import {
   PencilIcon as PencilIconSolid,
@@ -30,17 +30,28 @@ import { useProductStore } from '@/stores/productStore';
 import { useCategoryStore } from '@/stores/categoryStore';
 import { useBrandStore } from '@/stores/brandStore';
 import ProductCategoryDialog from '@/components/products/ProductCategoryDialog';
-import AttributesManager from '@/components/settings/AttributesManager';
+import ProductImportModal from '@/components/products/ProductImportModal';
 import { Product, Category } from '@/types';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 import ImageWithFallback from '@/components/ui/ImageWithFallback';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
+import axios from 'axios';
+import { getApiUrl } from '@/utils/apiConfig';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+const API_URL = getApiUrl();
+
 type ProductStatus = 'all' | 'active' | 'draft' | 'archived';
+
+const STATUS_LABELS: Record<ProductStatus, string> = {
+  all: 'Todo',
+  active: 'Activo',
+  draft: 'Borrador',
+  archived: 'Archivado',
+};
 
 interface Filters {
   category_id: string;
@@ -89,6 +100,8 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ProductStatus>('all');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<'activate' | 'deactivate' | 'archive' | 'delete' | ''>('');
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [mainTab, setMainTab] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -98,6 +111,9 @@ export default function ProductsPage() {
   // Category Modal State
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
+  // Import modal
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Sales History Modal State
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
@@ -114,8 +130,8 @@ export default function ProductsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Reset page when search or filters change
-  useEffect(() => { setPage(1); }, [debouncedSearch, filters, statusFilter]);
+  // Reset page and selection when search or filters change
+  useEffect(() => { setPage(1); setSelectedProducts([]); setBulkAction(''); }, [debouncedSearch, filters, statusFilter]);
 
   // Build fetch params from filters + status
   const buildParams = useCallback(() => {
@@ -132,8 +148,7 @@ export default function ProductsPage() {
     if (filters.stock_status) params.stock_status = filters.stock_status;
     if (filters.price_min !== '') params.price_min = parseFloat(filters.price_min);
     if (filters.price_max !== '') params.price_max = parseFloat(filters.price_max);
-    if (statusFilter === 'active') params.is_active = true;
-    if (statusFilter === 'draft') params.is_active = false;
+    if (statusFilter !== 'all') params.status = statusFilter;
     return params;
   }, [page, debouncedSearch, filters, statusFilter]);
 
@@ -217,8 +232,50 @@ export default function ProductsPage() {
     }
   };
 
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedProducts.length === 0) return;
+    if (bulkAction === 'delete') {
+      if (!confirm(`¿Eliminar ${selectedProducts.length} producto${selectedProducts.length > 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) return;
+    }
+    setBulkLoading(true);
+    try {
+      if (bulkAction === 'delete') {
+        await Promise.all(selectedProducts.map(id => deleteProduct(id)));
+      } else {
+        const patch =
+          bulkAction === 'activate'   ? { is_active: true } :
+          bulkAction === 'deactivate' ? { is_active: false } :
+          /* archive */                 { is_active: false, status: 'archived' };
+        await Promise.all(selectedProducts.map(id => updateProduct(id, patch)));
+      }
+      setSelectedProducts([]);
+      setBulkAction('');
+      fetchProducts(buildParams());
+    } catch (e) {
+      console.error('Error en acción masiva:', e);
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const handleCreateProduct = () => router.push('/products/create');
   const handleEditProduct = (product: Product) => router.push('/products/' + product.id + '/edit');
+
+  const handleExport = async () => {
+    const { token } = useAuthStore.getState();
+    const companyId = user?.current_company_id || user?.companies?.[0]?.id;
+    if (!companyId) return;
+    try {
+      const res = await axios.get(`${API_URL}/companies/${companyId}/products/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url; a.download = `productos_${new Date().toISOString().slice(0, 10)}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { console.error('Error al exportar'); }
+  };
 
   // Category Handlers
   const handleCreateCategory = () => { setEditingCategory(null); setIsCategoryDialogOpen(true); };
@@ -230,7 +287,8 @@ export default function ProductsPage() {
   };
 
   const handleToggleStatus = async (product: Product) => {
-    const newStatus = !product.is_active;
+    // Toggle between active ↔ draft (archived stays archived until explicit action)
+    const newStatus = product.status === 'active' ? 'draft' : 'active';
     const { user, token } = (await import('@/stores/authStore')).useAuthStore.getState();
     if (!token || !user) return;
     const companyId = user.current_company_id || user.companies?.[0]?.id;
@@ -240,7 +298,7 @@ export default function ProductsPage() {
       const { getApiUrl } = await import('@/utils/apiConfig');
       const API_URL = getApiUrl();
       await axios.put(`${API_URL}/companies/${companyId}/products/${product.id}`,
-        { is_active: newStatus },
+        { status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       await fetchProducts(buildParams());
@@ -307,9 +365,6 @@ export default function ProductsPage() {
             <Tab className={({ selected }) => clsx('py-3 px-1 text-sm font-medium border-b-2 transition-colors focus:outline-none flex items-center gap-1.5 whitespace-nowrap', selected ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300')}>
               <FolderIcon className="w-4 h-4" /> Categorías
             </Tab>
-            <Tab className={({ selected }) => clsx('py-3 px-1 text-sm font-medium border-b-2 transition-colors focus:outline-none flex items-center gap-1.5 whitespace-nowrap', selected ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300')}>
-              <SwatchIcon className="w-4 h-4" /> Atributos
-            </Tab>
           </Tab.List>
         </div>
 
@@ -320,14 +375,14 @@ export default function ProductsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Productos</h1>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="secondary" size="sm" className="hidden sm:inline-flex">
-                  <ArrowUpTrayIcon className="w-4 h-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Exportar</span>
-                </Button>
-                <Button variant="secondary" size="sm" className="hidden sm:inline-flex">
-                  <ArrowDownTrayIcon className="w-4 h-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Importar</span>
-                </Button>
+                <button onClick={handleExport} title="Exportar productos"
+                  className="p-2 text-gray-600 dark:text-gray-300 bg-white dark:bg-[#1E2230] border border-gray-300 dark:border-[#232834] rounded-lg hover:bg-gray-50 dark:hover:bg-[#232834] transition-colors">
+                  <ArrowUpTrayIcon className="w-4 h-4" />
+                </button>
+                <button onClick={() => setIsImportModalOpen(true)} title="Importar productos"
+                  className="p-2 text-gray-600 dark:text-gray-300 bg-white dark:bg-[#1E2230] border border-gray-300 dark:border-[#232834] rounded-lg hover:bg-gray-50 dark:hover:bg-[#232834] transition-colors">
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                </button>
                 <Button onClick={handleCreateProduct} size="sm">
                   <PlusIcon className="w-4 h-4 mr-1.5" />
                   <span className="hidden xs:inline">Agregar</span>
@@ -577,6 +632,52 @@ export default function ProductsPage() {
                 )}
               </div>
 
+              {/* Bulk Action Bar */}
+              {selectedProducts.length > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 dark:bg-white border-b border-gray-700 dark:border-gray-200">
+                  {/* Count + deselect */}
+                  <button onClick={() => setSelectedProducts([])} className="flex items-center gap-1.5 text-gray-300 dark:text-gray-600 hover:text-white dark:hover:text-gray-900 transition-colors mr-1">
+                    <XMarkIcon className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm font-medium text-white dark:text-gray-900 whitespace-nowrap">
+                    {selectedProducts.length} seleccionado{selectedProducts.length > 1 ? 's' : ''}
+                  </span>
+                  <div className="w-px h-4 bg-gray-600 dark:bg-gray-300 mx-1" />
+                  {/* Action select */}
+                  <select
+                    value={bulkAction}
+                    onChange={e => setBulkAction(e.target.value as typeof bulkAction)}
+                    className="text-sm border border-gray-600 dark:border-gray-300 rounded-lg bg-gray-800 dark:bg-white text-white dark:text-gray-900 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-white dark:focus:ring-gray-900"
+                  >
+                    <option value="">Seleccionar acción…</option>
+                    <option value="activate">✓ Activar</option>
+                    <option value="deactivate">○ Desactivar</option>
+                    <option value="archive">⊟ Archivar</option>
+                    <option value="delete">✕ Eliminar</option>
+                  </select>
+                  {/* Apply button */}
+                  <button
+                    onClick={handleBulkAction}
+                    disabled={!bulkAction || bulkLoading}
+                    className={clsx(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+                      bulkAction === 'delete'
+                        ? 'bg-red-600 hover:bg-red-500 text-white'
+                        : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                    )}
+                  >
+                    {bulkLoading
+                      ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      : bulkAction === 'activate'   ? <CheckCircleIcon className="w-3.5 h-3.5" />
+                        : bulkAction === 'deactivate' ? <NoSymbolIcon className="w-3.5 h-3.5" />
+                          : bulkAction === 'archive'   ? <ArchiveBoxIcon className="w-3.5 h-3.5" />
+                            : bulkAction === 'delete'    ? <TrashIcon className="w-3.5 h-3.5" />
+                              : null}
+                    Aplicar
+                  </button>
+                </div>
+              )}
+
               {/* Products Table */}
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-[#1E2230]">
@@ -606,6 +707,9 @@ export default function ProductsPage() {
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
                         Marca
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell">
+                        Ventas
                       </th>
                       <th scope="col" className="w-10 px-3 py-3"></th>
                     </tr>
@@ -692,6 +796,10 @@ export default function ProductsPage() {
                           <td className="px-4 py-3 hidden lg:table-cell">
                             <span className="text-sm text-gray-700 dark:text-gray-300">{product.brand?.name || '—'}</span>
                           </td>
+                          {/* Rendimiento de ventas */}
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <SalesBars count={(product as any).sales_count ?? 0} />
+                          </td>
                           {/* Actions */}
                           <td className="px-3 py-3">
                             <div className="flex items-center justify-end gap-1">
@@ -720,13 +828,9 @@ export default function ProductsPage() {
               {meta && (
                 <div className="px-4 py-3 border-t border-gray-200 dark:border-[#232834] flex items-center justify-between gap-2 flex-wrap">
                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                    {selectedProducts.length > 0 ? (
-                      <span>{selectedProducts.length} seleccionado(s)</span>
-                    ) : (
-                      <span className="hidden sm:inline">
-                        Mostrando {(meta.current_page - 1) * meta.per_page + 1}–{Math.min(meta.current_page * meta.per_page, meta.total)} de {meta.total}
-                      </span>
-                    )}
+                    <span className="hidden sm:inline">
+                      Mostrando {(meta.current_page - 1) * meta.per_page + 1}–{Math.min(meta.current_page * meta.per_page, meta.total)} de {meta.total}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
@@ -784,15 +888,12 @@ export default function ProductsPage() {
             </div>
           </Tab.Panel>
 
-          {/* ==================== ATTRIBUTES PANEL ==================== */}
-          <Tab.Panel>
-            <AttributesManager />
-          </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
 
       {/* Modals */}
       <ProductCategoryDialog isOpen={isCategoryDialogOpen} onClose={() => setIsCategoryDialogOpen(false)} category={editingCategory} />
+      <ProductImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImported={() => fetchProducts(buildParams())} />
 
       {/* Sales History Modal */}
       {historyProduct && (
@@ -888,6 +989,22 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Battery-style sales performance indicator (4 equal bars) */
+function SalesBars({ count }: { count: number }) {
+  const filled = count === 0 ? 0 : count <= 5 ? 1 : count <= 20 ? 2 : count <= 50 ? 3 : 4;
+  const color = filled === 4 ? 'bg-green-500' : filled === 3 ? 'bg-green-400' : filled === 2 ? 'bg-yellow-400' : 'bg-orange-400';
+  return (
+    <div className="flex items-center gap-[3px]" title={count > 0 ? `${count} venta${count !== 1 ? 's' : ''}` : 'Sin ventas'}>
+      <div className="flex items-center gap-[2px]">
+        {[1, 2, 3, 4].map((bar) => (
+          <div key={bar} className={clsx('w-[3.5px] h-[10px] rounded-[1px]', bar <= filled ? color : 'bg-gray-200 dark:bg-gray-700')} />
+        ))}
+      </div>
+      <span className="text-xs font-medium text-gray-600 dark:text-gray-300 tabular-nums w-6 text-right">{count > 0 ? count : '—'}</span>
     </div>
   );
 }
